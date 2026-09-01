@@ -1,8 +1,9 @@
-import requests
+from common.http_client import HttpClient
 
 
 def test_get_user() -> None:
-    response = requests.get("https://dummyjson.com/users/1", timeout=10)
+    with HttpClient("https://dummyjson.com", timeout=10) as client:
+        response = client.get("/users/1")
 
     assert response.status_code == 200
 
@@ -21,11 +22,8 @@ def test_create_user() -> None:
         "age": 21,
     }
 
-    response = requests.post(
-        "https://dummyjson.com/users/add",
-        json=payload,
-        timeout=10,
-    )
+    with HttpClient("https://dummyjson.com", timeout=10) as client:
+        response = client.post("/users/add", json=payload)
 
     assert response.status_code == 201
 
