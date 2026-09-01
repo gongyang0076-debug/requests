@@ -1,0 +1,7 @@
+test:
+  base_url: https://dummyjson.com
+  timeout: 10
+
+pre:
+  base_url: https://dummyjson.com
+  timeout: 15

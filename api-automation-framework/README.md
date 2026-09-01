@@ -11,6 +11,8 @@
 - 支持 GET、POST、PUT、PATCH、DELETE
 - 使用 `UserApi` 封装用户接口路径和 HTTP 方法
 - 使用 Pytest Fixture 注入配置、Client 和 API Object
+- 使用 YAML 管理 test/pre 环境配置
+- 支持 CLI、环境变量和 `.env` 切换环境
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。`UserApi` 负责描述用户接口如何调用，但不负责业务断言。Pytest Fixture 负责创建依赖并在测试结束后关闭 Session。
@@ -27,7 +29,7 @@ Fixture scope：
 Test Case → Fixture → UserApi → HttpClient → requests.Session → HTTP API
 ```
 
-多环境配置、数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
+数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
 
 DummyJSON 的写接口只模拟响应，不会持久化创建的数据，因此当前测试不依赖请求之间的执行顺序。
 
@@ -50,6 +52,30 @@ python -m pip install -r requirements.txt
 
 ## 运行测试
 
+使用默认 `test` 环境：
+
 ```powershell
 python -m pytest -v
 ```
+
+通过 CLI 使用 `pre` 环境：
+
+```powershell
+python -m pytest -v --env=pre
+```
+
+通过当前 Shell 的环境变量切换：
+
+```powershell
+$env:TEST_ENV = "pre"
+python -m pytest -v
+```
+
+也可以复制 `.env.example` 为不会提交的 `.env`。配置优先级为：
+
+```text
+--env → TEST_ENV → test
+API_BASE_URL / API_TIMEOUT → config/config.yaml
+```
+
+`test` 和 `pre` 当前都调用 DummyJSON，但配置了不同 timeout，用来实际验证环境选择机制。真实环境 URL 不应写在测试代码中。
