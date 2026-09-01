@@ -1,11 +1,8 @@
 from api.user_api import UserApi
-from common.http_client import HttpClient
 
 
-def test_get_user() -> None:
-    with HttpClient("https://dummyjson.com", timeout=10) as client:
-        user_api = UserApi(client)
-        response = user_api.get_user(1)
+def test_get_user(user_api: UserApi) -> None:
+    response = user_api.get_user(1)
 
     assert response.status_code == 200
 
@@ -17,16 +14,14 @@ def test_get_user() -> None:
     assert "@" in body["email"]
 
 
-def test_create_user() -> None:
+def test_create_user(user_api: UserApi) -> None:
     payload: dict[str, object] = {
         "firstName": "Tom",
         "lastName": "Tester",
         "age": 21,
     }
 
-    with HttpClient("https://dummyjson.com", timeout=10) as client:
-        user_api = UserApi(client)
-        response = user_api.create_user(payload)
+    response = user_api.create_user(payload)
 
     assert response.status_code == 201
 
@@ -38,12 +33,10 @@ def test_create_user() -> None:
     assert body["age"] == payload["age"]
 
 
-def test_update_user() -> None:
+def test_update_user(user_api: UserApi) -> None:
     payload = {"lastName": "Updated"}
 
-    with HttpClient("https://dummyjson.com", timeout=10) as client:
-        user_api = UserApi(client)
-        response = user_api.update_user(2, payload)
+    response = user_api.update_user(2, payload)
 
     assert response.status_code == 200
 
@@ -52,10 +45,8 @@ def test_update_user() -> None:
     assert body["lastName"] == payload["lastName"]
 
 
-def test_delete_user() -> None:
-    with HttpClient("https://dummyjson.com", timeout=10) as client:
-        user_api = UserApi(client)
-        response = user_api.delete_user(1)
+def test_delete_user(user_api: UserApi) -> None:
+    response = user_api.delete_user(1)
 
     assert response.status_code == 200
 

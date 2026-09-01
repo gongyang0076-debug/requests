@@ -10,17 +10,24 @@
 - 使用 `requests.Session` 复用连接和会话状态
 - 支持 GET、POST、PUT、PATCH、DELETE
 - 使用 `UserApi` 封装用户接口路径和 HTTP 方法
+- 使用 Pytest Fixture 注入配置、Client 和 API Object
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
-`HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。`UserApi` 负责描述用户接口如何调用，但不负责业务断言。测试仍会手动创建 Client 和 API Object；这个依赖生命周期问题将在后续 Fixture Sprint 中解决。
+`HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。`UserApi` 负责描述用户接口如何调用，但不负责业务断言。Pytest Fixture 负责创建依赖并在测试结束后关闭 Session。
+
+Fixture scope：
+
+- `config`：session scope，当前测试进程只创建一次
+- `client`：session scope，整个测试进程复用同一个 Session
+- `user_api`：function scope，每个测试获得一个新的轻量 API Object
 
 当前调用链：
 
 ```text
-Test Case → UserApi → HttpClient → requests.Session → HTTP API
+Test Case → Fixture → UserApi → HttpClient → requests.Session → HTTP API
 ```
 
-Fixture、配置、数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
+多环境配置、数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
 
 DummyJSON 的写接口只模拟响应，不会持久化创建的数据，因此当前测试不依赖请求之间的执行顺序。
 
