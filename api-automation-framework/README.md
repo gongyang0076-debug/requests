@@ -15,6 +15,9 @@
 - 支持 CLI、环境变量和 `.env` 切换环境
 - 使用 YAML 分离用户测试数据与测试逻辑
 - 使用 `pytest.mark.parametrize` 执行多条带 Case ID 的用例
+- 统一记录脱敏后的 HTTP Request、Response、Failure 和耗时
+- 同时输出控制台日志与 `logs/api_test.log` 文件日志
+- 生成包含 Epic、Feature、Story、Step 和附件的 Allure Results
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。`UserApi` 负责描述用户接口如何调用，但不负责业务断言。Pytest Fixture 负责创建依赖并在测试结束后关闭 Session。
@@ -31,7 +34,8 @@ Fixture scope：
 Test Case → Fixture → UserApi → HttpClient → requests.Session → HTTP API
 ```
 
-日志和测试报告能力将在后续 Sprint 中按实际问题逐步加入。
+敏感字段会在日志和 Allure 附件中递归脱敏。当前覆盖
+`Authorization`、`Token`、`Password` 和 `Cookie`（不区分大小写，并支持嵌套数据）。
 
 用户测试数据位于 `data/user.yaml`，包含正常、异常和边界场景。Pytest 使用 `case_id` 作为参数化用例 ID，因此失败输出可以直接定位到具体数据行对应的 Case。
 
@@ -60,6 +64,19 @@ python -m pip install -r requirements.txt
 
 ```powershell
 python -m pytest -v
+```
+
+生成 Allure 原始结果：
+
+```powershell
+python -m pytest -v --alluredir=allure-results --clean-alluredir
+```
+
+`allure-results` 不需要 Allure CLI 即可生成，是框架集成的核心产物。如果本机另外安装了 Allure CLI，可以再生成并打开 HTML 报告：
+
+```powershell
+allure generate allure-results -o reports/allure-report --clean
+allure open reports/allure-report
 ```
 
 通过 CLI 使用 `pre` 环境：
