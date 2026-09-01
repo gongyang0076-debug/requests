@@ -1,13 +1,17 @@
 # API Automation Framework
 
-这是一个按 Sprint 逐步演进的接口自动化测试框架。Sprint 0 只建立最小可运行的 Pytest 项目，用于验证 Python 测试环境和 Pytest 测试发现机制。
+这是一个按 Sprint 逐步演进的接口自动化测试框架。当前使用 DummyJSON 公开 API 跑通最基础的 HTTP 请求、响应和断言链路。
 
 ## 当前范围
 
 - Pytest 基础配置
 - 框架健康测试
+- 使用 Requests 直接发送 GET 和 POST 请求
+- 验证 HTTP 状态码、JSON 响应和关键业务字段
 
-HTTP 请求、API Object、Fixture、配置、数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
+Sprint 1 有意在测试中直接调用 Requests。HttpClient、API Object、Fixture、配置、数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
+
+DummyJSON 的写接口只模拟响应，不会持久化创建的数据，因此当前测试不依赖请求之间的执行顺序。
 
 ## 环境要求
 
