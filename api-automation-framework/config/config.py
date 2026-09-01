@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
 from dotenv import dotenv_values
+
+from utils.yaml_util import load_yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(__file__).with_name("config.yaml")
@@ -72,8 +73,7 @@ def _load_environment_values() -> dict[str, str]:
 
 
 def _load_yaml_config() -> dict[str, Any]:
-    with CONFIG_PATH.open(encoding="utf-8") as config_file:
-        raw_config = yaml.safe_load(config_file)
+    raw_config = load_yaml(CONFIG_PATH)
 
     if not isinstance(raw_config, dict) or not raw_config:
         raise ValueError(f"Configuration file is empty or invalid: {CONFIG_PATH}")

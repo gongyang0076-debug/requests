@@ -13,6 +13,8 @@
 - 使用 Pytest Fixture 注入配置、Client 和 API Object
 - 使用 YAML 管理 test/pre 环境配置
 - 支持 CLI、环境变量和 `.env` 切换环境
+- 使用 YAML 分离用户测试数据与测试逻辑
+- 使用 `pytest.mark.parametrize` 执行多条带 Case ID 的用例
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。`UserApi` 负责描述用户接口如何调用，但不负责业务断言。Pytest Fixture 负责创建依赖并在测试结束后关闭 Session。
@@ -29,7 +31,9 @@ Fixture scope：
 Test Case → Fixture → UserApi → HttpClient → requests.Session → HTTP API
 ```
 
-数据驱动和报告能力将在后续 Sprint 中按实际问题逐步加入。
+日志和测试报告能力将在后续 Sprint 中按实际问题逐步加入。
+
+用户测试数据位于 `data/user.yaml`，包含正常、异常和边界场景。Pytest 使用 `case_id` 作为参数化用例 ID，因此失败输出可以直接定位到具体数据行对应的 Case。
 
 DummyJSON 的写接口只模拟响应，不会持久化创建的数据，因此当前测试不依赖请求之间的执行顺序。
 

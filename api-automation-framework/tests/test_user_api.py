@@ -1,57 +1,75 @@
+from pathlib import Path
+from typing import Any
+
+import pytest
+from requests import Response
+
 from api.user_api import UserApi
+from utils.yaml_util import load_yaml
+
+UserCase = dict[str, Any]
+USER_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "user.yaml"
+USER_CASES: dict[str, list[UserCase]] = load_yaml(USER_DATA_PATH)
 
 
-def test_get_user(user_api: UserApi) -> None:
-    response = user_api.get_user(1)
-
-    assert response.status_code == 200
-
-    body = response.json()
-    assert body["id"] == 1
-    assert isinstance(body["firstName"], str)
-    assert body["firstName"]
-    assert isinstance(body["email"], str)
-    assert "@" in body["email"]
-
-
-def test_create_user(user_api: UserApi) -> None:
-    payload: dict[str, object] = {
-        "firstName": "Tom",
-        "lastName": "Tester",
-        "age": 21,
-    }
-
-    response = user_api.create_user(payload)
-
-    assert response.status_code == 201
+def _assert_response(response: Response, case: UserCase) -> None:
+    assert response.status_code == case["expected_status"], case["title"]
 
     body = response.json()
-    assert isinstance(body["id"], int)
-    assert body["id"] > 0
-    assert body["firstName"] == payload["firstName"]
-    assert body["lastName"] == payload["lastName"]
-    assert body["age"] == payload["age"]
+    for field, expected_value in case.get("expected_body", {}).items():
+        assert body.get(field) == expected_value, case["title"]
+
+    for field in case.get("expected_non_empty_fields", []):
+        assert field in body, case["title"]
+        assert body[field], case["title"]
+
+    for field, expected_fragment in case.get("expected_contains", {}).items():
+        assert expected_fragment in body[field], case["title"]
 
 
-def test_update_user(user_api: UserApi) -> None:
-    payload = {"lastName": "Updated"}
+@pytest.mark.parametrize(
+    "case",
+    USER_CASES["get_user"],
+    ids=lambda case: case["case_id"],
+)
+def test_get_user(user_api: UserApi, case: UserCase) -> None:
+    response = user_api.get_user(case["request"]["user_id"])
 
-    response = user_api.update_user(2, payload)
-
-    assert response.status_code == 200
-
-    body = response.json()
-    assert body["id"] == 2
-    assert body["lastName"] == payload["lastName"]
+    _assert_response(response, case)
 
 
-def test_delete_user(user_api: UserApi) -> None:
-    response = user_api.delete_user(1)
+@pytest.mark.parametrize(
+    "case",
+    USER_CASES["create_user"],
+    ids=lambda case: case["case_id"],
+)
+def test_create_user(user_api: UserApi, case: UserCase) -> None:
+    response = user_api.create_user(case["request"])
 
-    assert response.status_code == 200
+    _assert_response(response, case)
 
-    body = response.json()
-    assert body["id"] == 1
-    assert body["isDeleted"] is True
-    assert isinstance(body["deletedOn"], str)
-    assert body["deletedOn"]
+
+@pytest.mark.parametrize(
+    "case",
+    USER_CASES["update_user"],
+    ids=lambda case: case["case_id"],
+)
+def test_update_user(user_api: UserApi, case: UserCase) -> None:
+    request_data = case["request"]
+    response = user_api.update_user(
+        request_data["user_id"],
+        request_data["payload"],
+    )
+
+    _assert_response(response, case)
+
+
+@pytest.mark.parametrize(
+    "case",
+    USER_CASES["delete_user"],
+    ids=lambda case: case["case_id"],
+)
+def test_delete_user(user_api: UserApi, case: UserCase) -> None:
+    response = user_api.delete_user(case["request"]["user_id"])
+
+    _assert_response(response, case)

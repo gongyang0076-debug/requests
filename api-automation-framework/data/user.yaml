@@ -1,0 +1,92 @@
+get_user:
+  - case_id: user_get_001
+    title: 获取已存在用户
+    category: normal
+    request:
+      user_id: 1
+    expected_status: 200
+    expected_body:
+      id: 1
+    expected_non_empty_fields:
+      - firstName
+      - email
+    expected_contains:
+      email: "@"
+
+  - case_id: user_get_002
+    title: 获取不存在用户
+    category: exception
+    request:
+      user_id: 999999
+    expected_status: 404
+    expected_body: {}
+    expected_non_empty_fields:
+      - message
+
+  - case_id: user_get_003
+    title: 用户ID下边界为0
+    category: boundary
+    request:
+      user_id: 0
+    expected_status: 404
+    expected_body: {}
+    expected_non_empty_fields:
+      - message
+
+create_user:
+  - case_id: user_create_001
+    title: 正常创建用户
+    category: normal
+    request:
+      firstName: Tom
+      lastName: Tester
+      age: 21
+    expected_status: 201
+    expected_body:
+      firstName: Tom
+      lastName: Tester
+      age: 21
+    expected_non_empty_fields:
+      - id
+
+  - case_id: user_create_002
+    title: 年龄下边界为0
+    category: boundary
+    request:
+      firstName: Boundary
+      lastName: User
+      age: 0
+    expected_status: 201
+    expected_body:
+      firstName: Boundary
+      lastName: User
+      age: 0
+    expected_non_empty_fields:
+      - id
+
+update_user:
+  - case_id: user_update_001
+    title: 正常更新用户
+    category: normal
+    request:
+      user_id: 2
+      payload:
+        lastName: Updated
+    expected_status: 200
+    expected_body:
+      id: 2
+      lastName: Updated
+    expected_non_empty_fields: []
+
+delete_user:
+  - case_id: user_delete_001
+    title: 正常删除用户
+    category: normal
+    request:
+      user_id: 1
+    expected_status: 200
+    expected_body:
+      id: 1
+      isDeleted: true
+    expected_non_empty_fields:
+      - deletedOn
