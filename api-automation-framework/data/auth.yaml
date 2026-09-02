@@ -1,0 +1,18 @@
+login_failure:
+  - case_id: auth_login_002
+    title: 错误密码登录失败
+    category: exception
+    request:
+      username: $registered_user
+      password: WrongPassword_123
+    expected_status: 401
+    expected_detail: Invalid username or password
+
+  - case_id: auth_login_003
+    title: 不存在用户登录失败
+    category: exception
+    request:
+      username: $missing_user
+      password: WrongPassword_123
+    expected_status: 401
+    expected_detail: Invalid username or password

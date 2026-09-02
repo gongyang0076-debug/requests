@@ -2,29 +2,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.main import create_app
 from app.models import User
-
-
-@pytest.fixture(scope="session")
-def database_settings() -> Settings:
-    try:
-        settings = Settings()
-    except ValidationError:
-        pytest.fail(
-            "Real MySQL integration tests require DB_HOST, DB_PORT, DB_USER, "
-            "DB_PASSWORD and DB_NAME"
-        )
-
-    if settings.db_name != "api_test":
-        pytest.fail("Database integration tests must use the isolated api_test database")
-
-    return settings
 
 
 def test_database_creates_users_table_and_reads_data(

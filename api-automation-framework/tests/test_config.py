@@ -17,7 +17,7 @@ def test_load_test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert settings == Settings(
         environment="test",
-        base_url="https://dummyjson.com",
+        base_url="http://127.0.0.1:8000",
         timeout=10.0,
     )
 
@@ -29,7 +29,7 @@ def test_load_pre_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert settings == Settings(
         environment="pre",
-        base_url="https://dummyjson.com",
+        base_url="http://127.0.0.1:8001",
         timeout=15.0,
     )
 

@@ -1,12 +1,15 @@
 # API Test Server
 
-这是接口自动化项目的可控被测服务。当前提供 FastAPI 健康检查，并通过 SQLAlchemy + PyMySQL 连接真实 MySQL、创建 `users` 表。
+这是接口自动化项目的可控被测服务。当前提供 FastAPI 健康检查、MySQL `users` 表、用户注册登录和 JWT 鉴权。
 
 ## 当前接口
 
 ```text
 GET /health
 GET /health/db
+POST /api/auth/register
+POST /api/auth/login
+GET /api/users/me
 ```
 
 成功响应：
@@ -52,9 +55,18 @@ DB_PORT
 DB_USER
 DB_PASSWORD
 DB_NAME
+JWT_SECRET_KEY
+JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES
 ```
 
-`.env` 已被 Git 忽略，不得提交真实密码。测试必须使用隔离数据库 `api_test`，不使用 SQLite。服务启动时会创建当前 Sprint 所需的 `users` 表。
+`.env` 已被 Git 忽略，不得提交真实密码或 JWT 签名密钥。`JWT_SECRET_KEY` 至少 32 个字符。测试必须使用隔离数据库 `api_test`，不使用 SQLite。服务启动时会创建当前 Sprint 所需的 `users` 表。
+
+注册密码使用 Argon2 哈希后落库，不存储明文。登录成功返回 `access_token` 和 `token_type=bearer`，访问 `/api/users/me` 时必须携带：
+
+```text
+Authorization: Bearer <access_token>
+```
 
 本机 Sprint 9 验收使用已有的 `mysql:8.4.5` Docker 镜像和 3308 端口。下面的命令通过当前 Shell 环境变量传递密码，不把密码写入命令或仓库：
 

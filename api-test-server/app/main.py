@@ -6,7 +6,9 @@ from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine
 
-from app.core.config import Settings
+from app.api.auth import router as auth_router
+from app.api.users import router as users_router
+from app.core.config import AuthSettings, Settings
 from app.database.session import (
     DatabaseUnavailableError,
     create_database_engine,
@@ -19,11 +21,16 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    auth_settings: AuthSettings | None = None,
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         engine: Engine | None = None
         database_error: str | None = None
+        resolved_auth_settings: AuthSettings | None = None
+        auth_error: str | None = None
 
         try:
             database_settings = settings or Settings()
@@ -37,8 +44,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 engine.dispose()
             engine = None
 
+        try:
+            resolved_auth_settings = auth_settings or AuthSettings()
+        except ValidationError:
+            auth_error = "Authentication configuration is invalid"
+
         application.state.db_engine = engine
         application.state.database_error = database_error
+        application.state.auth_settings = resolved_auth_settings
+        application.state.auth_error = auth_error
 
         try:
             yield
@@ -49,9 +63,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application = FastAPI(
         title="API Test Server",
         description="Controllable backend for the API automation framework.",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
+    application.include_router(auth_router)
+    application.include_router(users_router)
 
     @application.get("/health", response_model=HealthResponse)
     async def get_health() -> HealthResponse:
