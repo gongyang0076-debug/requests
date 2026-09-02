@@ -7,6 +7,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine
 
 from app.api.auth import router as auth_router
+from app.api.orders import router as orders_router
 from app.api.products import router as products_router
 from app.api.users import router as users_router
 from app.core.config import AuthSettings, Settings
@@ -64,12 +65,13 @@ def create_app(
     application = FastAPI(
         title="API Test Server",
         description="Controllable backend for the API automation framework.",
-        version="0.4.0",
+        version="0.5.0",
         lifespan=lifespan,
     )
     application.include_router(auth_router)
     application.include_router(users_router)
     application.include_router(products_router)
+    application.include_router(orders_router)
 
     @application.get("/health", response_model=HealthResponse)
     async def get_health() -> HealthResponse:

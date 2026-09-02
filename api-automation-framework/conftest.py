@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from api.auth_api import AuthApi
+from api.order_api import OrderApi
 from api.product_api import ProductApi
 from api.user_api import UserApi
 from common.http_client import HttpClient
@@ -112,3 +113,8 @@ def public_user_api(client: HttpClient) -> UserApi:
 @pytest.fixture
 def product_api(auth_client: HttpClient) -> ProductApi:
     return ProductApi(auth_client)
+
+
+@pytest.fixture
+def order_api(auth_client: HttpClient) -> OrderApi:
+    return OrderApi(auth_client)

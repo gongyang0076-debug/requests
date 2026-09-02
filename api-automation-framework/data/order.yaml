@@ -1,0 +1,80 @@
+create_success:
+  case_id: order_create_001
+  title: 正常创建订单
+  product:
+    name: Order Product
+    price: 15.50
+    stock: 5
+    status: ACTIVE
+  request:
+    quantity: 2
+  expected_status: 201
+  expected_order_status: CREATED
+  expected_total_amount: 31.00
+
+pay:
+  case_id: order_pay_001
+  title: 支付订单并拒绝重复支付
+  product:
+    name: Payment Product
+    price: 20.00
+    stock: 3
+    status: ACTIVE
+  request:
+    quantity: 1
+  expected_status: PAID
+  repeated_pay_status: 409
+  cancel_paid_status: 409
+
+cancel:
+  case_id: order_cancel_001
+  title: 取消订单并恢复库存
+  product:
+    name: Cancellation Product
+    price: 12.00
+    stock: 3
+    status: ACTIVE
+  request:
+    quantity: 2
+  expected_status: CANCELLED
+  pay_cancelled_status: 409
+
+insufficient_stock:
+  case_id: order_create_002
+  title: 库存不足创建失败
+  product:
+    name: Low Stock Product
+    price: 10.00
+    stock: 1
+    status: ACTIVE
+  request:
+    quantity: 2
+  expected_status: 409
+  expected_detail: Insufficient stock
+
+missing_product:
+  case_id: order_create_003
+  title: 商品不存在创建失败
+  product_id: 999999999
+  request:
+    quantity: 1
+  expected_status: 404
+  expected_detail: Product not found
+
+invalid_quantity:
+  - case_id: order_create_004
+    title: 订单数量为0
+    quantity: 0
+    expected_status: 422
+
+  - case_id: order_create_005
+    title: 订单数量为负数
+    quantity: -1
+    expected_status: 422
+
+missing_order:
+  case_id: order_get_404
+  title: 查询不存在订单
+  order_id: 999999999
+  expected_status: 404
+  expected_detail: Order not found

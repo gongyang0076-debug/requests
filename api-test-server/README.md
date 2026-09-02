@@ -1,6 +1,6 @@
 # API Test Server
 
-这是接口自动化项目的可控被测服务。当前提供 FastAPI 健康检查、MySQL 用户与商品表、用户注册登录、JWT 鉴权和商品 CRUD。
+这是接口自动化项目的可控被测服务。当前提供 FastAPI 健康检查、MySQL 用户/商品/订单表、JWT 鉴权、商品 CRUD 和订单状态流转。
 
 ## 当前接口
 
@@ -15,6 +15,10 @@ GET /api/products/{id}
 GET /api/products
 PUT /api/products/{id}
 DELETE /api/products/{id}
+POST /api/orders
+GET /api/orders/{id}
+POST /api/orders/{id}/pay
+POST /api/orders/{id}/cancel
 ```
 
 成功响应：
@@ -65,7 +69,7 @@ JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES
 ```
 
-`.env` 已被 Git 忽略，不得提交真实密码或 JWT 签名密钥。`JWT_SECRET_KEY` 至少 32 个字符。测试必须使用隔离数据库 `api_test`，不使用 SQLite。服务启动时会创建当前 Sprint 所需的 `users` 表。
+`.env` 已被 Git 忽略，不得提交真实密码或 JWT 签名密钥。`JWT_SECRET_KEY` 至少 32 个字符。测试必须使用隔离数据库 `api_test`，不使用 SQLite。服务启动时会创建当前 Sprint 所需的 `users`、`products` 和 `orders` 表。
 
 注册密码使用 Argon2 哈希后落库，不存储明文。登录成功返回 `access_token` 和 `token_type=bearer`，访问 `/api/users/me` 时必须携带：
 
@@ -75,7 +79,9 @@ Authorization: Bearer <access_token>
 
 商品接口全部需要 JWT。价格使用 `NUMERIC(10,2)` 存储，要求大于 0；库存允许为 0，但不能为负数；商品状态只能为 `ACTIVE` 或 `INACTIVE`。删除成功返回 HTTP 204。
 
-本机 Sprint 9 验收使用已有的 `mysql:8.4.5` Docker 镜像和 3308 端口。下面的命令通过当前 Shell 环境变量传递密码，不把密码写入命令或仓库：
+订单接口同样需要 JWT。创建订单时由服务端从 Token 获取用户 ID、读取商品单价、计算总金额并扣减库存；取消未支付订单会恢复库存。状态只允许 `CREATED → PAID` 或 `CREATED → CANCELLED`，重复支付、取消已支付订单、支付已取消订单均返回 409。
+
+本机数据库验收使用已有的 `mysql:8.4.5` Docker 镜像和 3308 端口。下面的命令通过当前 Shell 环境变量传递密码，不把密码写入命令或仓库：
 
 ```powershell
 $env:MYSQL_ROOT_PASSWORD = Read-Host "MySQL root password" -MaskInput

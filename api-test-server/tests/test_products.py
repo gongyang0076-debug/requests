@@ -1,59 +1,34 @@
 from collections.abc import Generator
 from decimal import Decimal
-from typing import TypeAlias
-from uuid import uuid4
+from typing import Any, TypeAlias
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
-from app.core.config import AuthSettings, Settings
-from app.main import create_app
-from app.models import Product, User
+from app.models import Product
 
 AuthenticatedProductClient: TypeAlias = tuple[TestClient, dict[str, str], str]
 
 
 @pytest.fixture
 def authenticated_product_client(
-    database_settings: Settings,
-    auth_settings: AuthSettings,
+    authenticated_client: dict[str, Any],
 ) -> Generator[AuthenticatedProductClient, None, None]:
-    suffix = uuid4().hex
-    username = f"product_user_{suffix}"
-    product_prefix = f"product_{suffix}"
-    user_payload = {
-        "username": username,
-        "email": f"{username}@example.com",
-        "password": f"ValidPassword_{suffix}",
-    }
+    client: TestClient = authenticated_client["client"]
+    headers: dict[str, str] = authenticated_client["headers"]
+    engine: Engine = authenticated_client["engine"]
+    product_prefix = f"product_{authenticated_client['suffix']}"
 
-    with TestClient(create_app(database_settings, auth_settings)) as client:
-        register_response = client.post("/api/auth/register", json=user_payload)
-        assert register_response.status_code == 201
-        login_response = client.post(
-            "/api/auth/login",
-            json={
-                "username": username,
-                "password": user_payload["password"],
-            },
-        )
-        assert login_response.status_code == 200
-        headers = {
-            "Authorization": f"Bearer {login_response.json()['access_token']}"
-        }
-        engine: Engine = client.app.state.db_engine
-
-        try:
-            yield client, headers, product_prefix
-        finally:
-            with Session(engine) as session:
-                session.execute(
-                    delete(Product).where(Product.name.like(f"{product_prefix}%"))
-                )
-                session.execute(delete(User).where(User.username == username))
-                session.commit()
+    try:
+        yield client, headers, product_prefix
+    finally:
+        with Session(engine) as session:
+            session.execute(
+                delete(Product).where(Product.name.like(f"{product_prefix}%"))
+            )
+            session.commit()
 
 
 def test_product_crud_and_database_persistence(
@@ -186,14 +161,13 @@ def test_product_operations_return_404_for_missing_product(
 
 
 def test_create_product_requires_token(
-    database_settings: Settings,
-    auth_settings: AuthSettings,
+    authenticated_client: dict[str, Any],
 ) -> None:
-    with TestClient(create_app(database_settings, auth_settings)) as client:
-        response = client.post(
-            "/api/products",
-            json={"name": "Unauthorized", "price": "10.00", "stock": 1},
-        )
+    client: TestClient = authenticated_client["client"]
+    response = client.post(
+        "/api/products",
+        json={"name": "Unauthorized", "price": "10.00", "stock": 1},
+    )
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}

@@ -3,7 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.database.base import Base
-from app.models import Product, User  # noqa: F401  # Register table metadata.
+from app.models import Order, Product, User  # noqa: F401  # Register table metadata.
 
 
 class DatabaseUnavailableError(RuntimeError):
