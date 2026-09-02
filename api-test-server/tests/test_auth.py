@@ -122,6 +122,23 @@ def test_get_current_user_rejects_missing_or_invalid_token(
     assert response.status_code == 401
 
 
+def test_login_sql_injection_is_treated_as_plain_input(
+    database_settings: Settings,
+    auth_settings: AuthSettings,
+) -> None:
+    with TestClient(create_app(database_settings, auth_settings)) as client:
+        response = client.post(
+            "/api/auth/login",
+            json={
+                "username": "' OR '1'='1' --",
+                "password": "irrelevant",
+            },
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid username or password"}
+
+
 def test_login_returns_503_when_auth_configuration_is_missing(
     database_settings: Settings,
     monkeypatch: pytest.MonkeyPatch,

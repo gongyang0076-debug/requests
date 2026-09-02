@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ProductStatus = Literal["ACTIVE", "INACTIVE"]
 
@@ -14,6 +14,13 @@ class ProductCreate(BaseModel):
     price: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
     stock: int = Field(ge=0)
     status: ProductStatus = "ACTIVE"
+
+    @field_validator("name")
+    @classmethod
+    def reject_html_markup(cls, value: str) -> str:
+        if "<" in value or ">" in value:
+            raise ValueError("name must not contain HTML markup")
+        return value
 
 
 class ProductUpdate(ProductCreate):

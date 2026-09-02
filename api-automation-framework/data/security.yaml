@@ -1,0 +1,109 @@
+auth_registration_invalid:
+  - case_id: auth_register_004
+    title: 缺少用户名
+    category: exception
+    request:
+      email: missing_username@example.com
+      password: ValidPassword_123
+    expected_status: 422
+    expected_field: username
+
+  - case_id: auth_register_005
+    title: 用户名超过50字符
+    category: boundary
+    request:
+      username: $overlong_username
+      email: overlong_username@example.com
+      password: ValidPassword_123
+    expected_status: 422
+    expected_field: username
+
+  - case_id: auth_register_006
+    title: 用户名包含XSS标记
+    category: security
+    request:
+      username: <script>alert_xss</script>
+      email: xss_username@example.com
+      password: ValidPassword_123
+    expected_status: 422
+    expected_field: username
+
+auth_login_security:
+  - case_id: auth_login_007
+    title: SQL Injection 登录输入按普通字符串处理
+    category: security
+    request:
+      username: "' OR '1'='1' --"
+      password: irrelevant
+    expected_status: 401
+    expected_detail: Invalid username or password
+
+product_invalid:
+  - case_id: product_create_006
+    title: 缺少商品价格
+    category: exception
+    request:
+      name: Missing Price Product
+      stock: 1
+      status: ACTIVE
+    expected_status: 422
+    expected_field: price
+
+  - case_id: product_create_007
+    title: 商品名称超过100字符
+    category: boundary
+    request:
+      name: $overlong_product_name
+      price: 10.00
+      stock: 1
+      status: ACTIVE
+    expected_status: 422
+    expected_field: name
+
+  - case_id: product_create_008
+    title: 商品状态非法
+    category: exception
+    request:
+      name: Invalid Status Product
+      price: 10.00
+      stock: 1
+      status: UNKNOWN
+    expected_status: 422
+    expected_field: status
+
+  - case_id: product_create_009
+    title: 商品名称包含XSS标记
+    category: security
+    request:
+      name: <script>alert('xss')</script>
+      price: 10.00
+      stock: 1
+      status: ACTIVE
+    expected_status: 422
+    expected_field: name
+
+order_invalid:
+  - case_id: order_create_006
+    title: 缺少商品ID
+    category: exception
+    request:
+      quantity: 1
+    expected_status: 422
+    expected_field: product_id
+
+  - case_id: order_create_007
+    title: 缺少购买数量
+    category: exception
+    request:
+      product_id: $product_id
+    expected_status: 422
+    expected_field: quantity
+
+  - case_id: order_create_008
+    title: 购买数量超过10000上边界
+    category: boundary
+    request:
+      product_id: $product_id
+      quantity: 10001
+    expected_status: 422
+    expected_field: quantity

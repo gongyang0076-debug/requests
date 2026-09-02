@@ -137,6 +137,24 @@ def test_create_product_rejects_negative_stock(
     assert response.status_code == 422
 
 
+def test_create_product_rejects_xss_markup(
+    authenticated_product_client: AuthenticatedProductClient,
+) -> None:
+    client, headers, _product_prefix = authenticated_product_client
+    response = client.post(
+        "/api/products",
+        json={
+            "name": "<script>alert('xss')</script>",
+            "price": "10.00",
+            "stock": 1,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "name"
+
+
 @pytest.mark.parametrize("method", ["GET", "PUT", "DELETE"])
 def test_product_operations_return_404_for_missing_product(
     authenticated_product_client: AuthenticatedProductClient,

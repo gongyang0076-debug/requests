@@ -148,6 +148,16 @@ def public_user_api(client: HttpClient) -> UserApi:
 
 
 @pytest.fixture
+def public_product_api(client: HttpClient) -> ProductApi:
+    return ProductApi(client)
+
+
+@pytest.fixture
+def public_order_api(client: HttpClient) -> OrderApi:
+    return OrderApi(client)
+
+
+@pytest.fixture
 def product_api(auth_client: HttpClient) -> ProductApi:
     return ProductApi(auth_client)
 

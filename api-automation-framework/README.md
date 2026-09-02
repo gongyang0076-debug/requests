@@ -25,6 +25,8 @@
 - 支持订单状态的 API Response + MySQL 双重断言
 - 使用 Faker 动态生成唯一用户、邮箱、商品和订单请求数据
 - 使用 TestDataManager 登记资源并在 Fixture teardown 中统一清理
+- 覆盖缺失参数、超长字符串、非法枚举、错误 Token 和订单越权
+- 验证 SQL Injection 输入按普通数据处理，并拒绝商品名称中的原始 HTML/XSS 标记
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。API Object 负责描述业务接口如何调用，但不负责业务断言。Pytest Fixture 负责注册用户、登录、保存 Token、创建认证 Client，并在测试结束后关闭 Session。
@@ -53,13 +55,15 @@ Test Case → Fixture → AuthApi / UserApi / ProductApi / OrderApi → HttpClie
 敏感字段会在日志和 Allure 附件中递归脱敏。当前覆盖
 `Authorization`、`Token`、`Password` 和 `Cookie`（不区分大小写，并支持嵌套数据）。
 
-认证、商品和订单数据分别位于 `data/auth.yaml`、`data/product.yaml`、`data/order.yaml`。订单测试从商品创建响应动态获取 Product ID，再从订单创建响应动态获取 Order ID，不依赖固定数据库记录。
+认证、商品、订单及安全输入数据分别位于 `data/auth.yaml`、`data/product.yaml`、`data/order.yaml`、`data/security.yaml`。订单测试从商品创建响应动态获取 Product ID，再从订单创建响应动态获取 Order ID，不依赖固定数据库记录。
 
 完整 E2E Case 位于 `tests/test_e2e_order_payment.py`，显式执行注册、登录、当前用户校验、创建商品、创建订单、支付前查询、支付和支付后查询。Token、Product ID、Order ID 均来自同一用例的前置响应；支付后还会通过参数化 SQL 查询 `orders.status`，与 API 的 `PAID` 结果进行双重验证。
 
 数据库配置只从 `.env` 或运行环境读取：`DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`，可选 `DB_CONNECT_TIMEOUT`。不创建业务数据的框架单元测试不会主动加载这些配置；执行带测试数据生命周期的接口测试时需要 MySQL。
 
 注册用户和商品由 Faker 动态生成，不依赖固定 ID，也不依赖用例执行顺序。成功创建资源后会立即登记 ID，teardown 按外键关系执行：先通过数据库删除订单，再通过现有业务 API 删除商品，最后通过数据库删除测试用户。订单和用户当前没有业务删除接口，因此只对这两类数据使用数据库清理；清理失败会报告为测试错误，不会被静默忽略。
+
+当前 XSS 输入校验只拒绝商品名称中的原始 `<` 和 `>` HTML 标记，用于验证基础输入边界；它不能替代消费端输出编码、Content Security Policy 或专业安全测试。
 
 ## 环境要求
 
