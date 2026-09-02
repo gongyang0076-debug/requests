@@ -1,5 +1,6 @@
 allure-pytest==2.16.0
 pytest==8.4.1
 python-dotenv==1.2.3
+PyMySQL==1.2.0
 PyYAML==6.0.3
 requests==2.32.5

@@ -1,8 +1,12 @@
-import os
-
 import pytest
 
-from config.config import Settings, load_config
+import config.config as config_module
+from config.config import (
+    DatabaseSettings,
+    Settings,
+    load_config,
+    load_database_config,
+)
 
 
 def _clear_value_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,3 +68,42 @@ def test_config_fixture_uses_cli_environment(
         assert config.environment == cli_environment
     else:
         assert config == load_config()
+
+
+def test_load_database_config_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_values = {
+        "DB_HOST": "127.0.0.1",
+        "DB_PORT": "3308",
+        "DB_USER": "api_test_user",
+        "DB_PASSWORD": "local_test_password",
+        "DB_NAME": "api_test",
+        "DB_CONNECT_TIMEOUT": "5",
+    }
+    monkeypatch.setattr(
+        config_module,
+        "_load_environment_values",
+        lambda: database_values,
+    )
+
+    settings = load_database_config()
+
+    assert settings == DatabaseSettings(
+        host="127.0.0.1",
+        port=3308,
+        user="api_test_user",
+        password="local_test_password",
+        name="api_test",
+        connect_timeout=5,
+    )
+    assert "local_test_password" not in repr(settings)
+
+
+def test_load_database_config_reports_missing_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config_module, "_load_environment_values", lambda: {})
+
+    with pytest.raises(ValueError, match="Missing database configuration"):
+        load_database_config()

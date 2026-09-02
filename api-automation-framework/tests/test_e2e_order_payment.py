@@ -9,6 +9,8 @@ from api.auth_api import AuthApi
 from api.order_api import OrderApi
 from api.product_api import ProductApi
 from api.user_api import UserApi
+from common.database import DatabaseClient
+from common.logger import format_json
 
 AuthenticatedApiFactory = Callable[
     [str],
@@ -22,6 +24,7 @@ AuthenticatedApiFactory = Callable[
 def test_register_to_paid_order_e2e(
     auth_api: AuthApi,
     authenticated_api_factory: AuthenticatedApiFactory,
+    database_client: DatabaseClient,
 ) -> None:
     suffix = uuid4().hex
     user_payload = {
@@ -107,3 +110,23 @@ def test_register_to_paid_order_e2e(
             product_after_order_response = product_api.get_product(product_id)
             assert product_after_order_response.status_code == 200
             assert product_after_order_response.json()["stock"] == 1
+
+        with allure.step("查询 MySQL 验证订单关键状态"):
+            database_order = database_client.fetch_one(
+                "SELECT status FROM orders WHERE id = %s",
+                (order_id,),
+            )
+            allure.attach(
+                format_json(
+                    {
+                        "query": "SELECT status FROM orders WHERE id = %s",
+                        "params": [order_id],
+                        "result": database_order,
+                    },
+                    pretty=True,
+                ),
+                name="MySQL Order Status",
+                attachment_type=allure.attachment_type.JSON,
+            )
+            assert database_order is not None
+            assert database_order["status"] == "PAID"

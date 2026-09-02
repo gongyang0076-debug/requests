@@ -9,8 +9,14 @@ from api.auth_api import AuthApi
 from api.order_api import OrderApi
 from api.product_api import ProductApi
 from api.user_api import UserApi
+from common.database import DatabaseClient
 from common.http_client import HttpClient
-from config.config import Settings, load_config
+from config.config import (
+    DatabaseSettings,
+    Settings,
+    load_config,
+    load_database_config,
+)
 
 AuthenticatedApiSet = tuple[UserApi, ProductApi, OrderApi]
 AuthenticatedApiFactory = Callable[
@@ -33,6 +39,20 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 @pytest.fixture(scope="session")
 def config(pytestconfig: pytest.Config) -> Settings:
     return load_config(pytestconfig.getoption("--env"))
+
+
+@pytest.fixture(scope="session")
+def database_config() -> DatabaseSettings:
+    return load_database_config()
+
+
+@pytest.fixture(scope="session")
+def database_client(
+    database_config: DatabaseSettings,
+) -> Generator[DatabaseClient, None, None]:
+    mysql_client = DatabaseClient(database_config)
+    yield mysql_client
+    mysql_client.close()
 
 
 @pytest.fixture(scope="session")

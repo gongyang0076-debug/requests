@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,16 @@ class Settings:
     environment: str
     base_url: str
     timeout: float
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseSettings:
+    host: str
+    port: int
+    user: str
+    password: str = field(repr=False)
+    name: str
+    connect_timeout: int = 3
 
 
 def load_config(environment: str | None = None) -> Settings:
@@ -60,6 +70,44 @@ def load_config(environment: str | None = None) -> Settings:
         environment=selected_environment,
         base_url=base_url.strip(),
         timeout=timeout,
+    )
+
+
+def load_database_config() -> DatabaseSettings:
+    environment_values = _load_environment_values()
+    required_names = ("DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME")
+    missing_names = [
+        name
+        for name in required_names
+        if not environment_values.get(name, "").strip()
+    ]
+    if missing_names:
+        raise ValueError(
+            "Missing database configuration: " + ", ".join(missing_names)
+        )
+
+    try:
+        port = int(environment_values["DB_PORT"])
+    except ValueError as error:
+        raise ValueError("DB_PORT must be an integer") from error
+    if not 1 <= port <= 65_535:
+        raise ValueError("DB_PORT must be between 1 and 65535")
+
+    timeout_value = environment_values.get("DB_CONNECT_TIMEOUT", "3")
+    try:
+        connect_timeout = int(timeout_value)
+    except ValueError as error:
+        raise ValueError("DB_CONNECT_TIMEOUT must be an integer") from error
+    if connect_timeout <= 0:
+        raise ValueError("DB_CONNECT_TIMEOUT must be greater than zero")
+
+    return DatabaseSettings(
+        host=environment_values["DB_HOST"].strip(),
+        port=port,
+        user=environment_values["DB_USER"].strip(),
+        password=environment_values["DB_PASSWORD"],
+        name=environment_values["DB_NAME"].strip(),
+        connect_timeout=connect_timeout,
     )
 
 
