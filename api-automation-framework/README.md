@@ -1,6 +1,6 @@
 # API Automation Framework
 
-这是一个按 Sprint 逐步演进的接口自动化测试框架。当前已经停止依赖 DummyJSON，改为调用项目内的 FastAPI + MySQL 被测服务，并跑通注册、登录、JWT 和当前用户链路。
+这是一个按 Sprint 逐步演进的接口自动化测试框架。当前调用项目内的 FastAPI + MySQL 被测服务，已经跑通注册、登录、JWT、当前用户和商品 CRUD 链路。
 
 ## 当前范围
 
@@ -9,7 +9,7 @@
 - 使用 `HttpClient` 统一发送 HTTP 请求
 - 使用 `requests.Session` 复用连接和会话状态
 - 支持 GET、POST、PUT、PATCH、DELETE
-- 使用 `AuthApi`、`UserApi` 封装认证和用户接口
+- 使用 `AuthApi`、`UserApi`、`ProductApi` 封装业务接口
 - 使用 Pytest Fixture 注入配置、Client 和 API Object
 - 使用 YAML 管理 test/pre 环境配置
 - 支持 CLI、环境变量和 `.env` 切换环境
@@ -32,17 +32,18 @@ Fixture scope：
 - `auth_token`：session scope，只登录一次并复用 JWT
 - `auth_client`：session scope，通过默认 Header 自动携带 JWT
 - `user_api`：function scope，每个测试获得一个新的轻量 API Object
+- `product_api`：function scope，复用认证 Client，但不在 API Object 中保存测试数据
 
 当前调用链：
 
 ```text
-Test Case → Fixture → AuthApi / UserApi → HttpClient → requests.Session → FastAPI
+Test Case → Fixture → AuthApi / UserApi / ProductApi → HttpClient → requests.Session → FastAPI
 ```
 
 敏感字段会在日志和 Allure 附件中递归脱敏。当前覆盖
 `Authorization`、`Token`、`Password` 和 `Cookie`（不区分大小写，并支持嵌套数据）。
 
-认证异常数据位于 `data/auth.yaml`。Pytest 只参数化不敏感的 `case_id`，避免密码出现在 Allure 参数中；测试数据中的密码仍会在 Request 日志和附件里递归脱敏。
+认证异常数据位于 `data/auth.yaml`，商品正常、边界和异常数据位于 `data/product.yaml`。Pytest 使用 `case_id` 作为参数化 ID；认证测试只参数化不敏感的 Case ID，避免密码出现在 Allure 参数中。
 
 注册用户由 Fixture 动态生成，不依赖固定用户 ID，也不依赖用例执行顺序。当前被测服务还没有用户删除接口，完整测试数据清理将在测试数据生命周期 Sprint 中实现；本阶段验收使用一次性 MySQL 容器。
 

@@ -1,6 +1,6 @@
 # API Test Server
 
-这是接口自动化项目的可控被测服务。当前提供 FastAPI 健康检查、MySQL `users` 表、用户注册登录和 JWT 鉴权。
+这是接口自动化项目的可控被测服务。当前提供 FastAPI 健康检查、MySQL 用户与商品表、用户注册登录、JWT 鉴权和商品 CRUD。
 
 ## 当前接口
 
@@ -10,6 +10,11 @@ GET /health/db
 POST /api/auth/register
 POST /api/auth/login
 GET /api/users/me
+POST /api/products
+GET /api/products/{id}
+GET /api/products
+PUT /api/products/{id}
+DELETE /api/products/{id}
 ```
 
 成功响应：
@@ -67,6 +72,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES
 ```text
 Authorization: Bearer <access_token>
 ```
+
+商品接口全部需要 JWT。价格使用 `NUMERIC(10,2)` 存储，要求大于 0；库存允许为 0，但不能为负数；商品状态只能为 `ACTIVE` 或 `INACTIVE`。删除成功返回 HTTP 204。
 
 本机 Sprint 9 验收使用已有的 `mysql:8.4.5` Docker 镜像和 3308 端口。下面的命令通过当前 Shell 环境变量传递密码，不把密码写入命令或仓库：
 

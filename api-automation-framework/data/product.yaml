@@ -1,0 +1,73 @@
+create_success:
+  - case_id: product_create_001
+    title: 正常创建商品
+    category: normal
+    request:
+      name: Automation Product
+      price: 19.99
+      stock: 10
+      status: ACTIVE
+    expected_status: 201
+
+  - case_id: product_create_002
+    title: 库存下边界为0
+    category: boundary
+    request:
+      name: Zero Stock Product
+      price: 10.00
+      stock: 0
+      status: ACTIVE
+    expected_status: 201
+
+create_invalid:
+  - case_id: product_create_003
+    title: 商品价格为0
+    category: boundary
+    request:
+      name: Zero Price Product
+      price: 0
+      stock: 1
+      status: ACTIVE
+    expected_status: 422
+
+  - case_id: product_create_004
+    title: 商品价格为负数
+    category: exception
+    request:
+      name: Negative Price Product
+      price: -0.01
+      stock: 1
+      status: ACTIVE
+    expected_status: 422
+
+  - case_id: product_create_005
+    title: 商品库存为负数
+    category: exception
+    request:
+      name: Negative Stock Product
+      price: 10.00
+      stock: -1
+      status: ACTIVE
+    expected_status: 422
+
+update:
+  case_id: product_update_001
+  title: 修改商品并删除
+  create_request:
+    name: Product Before Update
+    price: 20.00
+    stock: 5
+    status: ACTIVE
+  update_request:
+    name: Product After Update
+    price: 25.50
+    stock: 0
+    status: INACTIVE
+  expected_status: 200
+
+not_found:
+  case_id: product_get_404
+  title: 查询不存在商品
+  product_id: 999999999
+  expected_status: 404
+  expected_detail: Product not found

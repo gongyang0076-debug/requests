@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from api.auth_api import AuthApi
+from api.product_api import ProductApi
 from api.user_api import UserApi
 from common.http_client import HttpClient
 from config.config import Settings, load_config
@@ -106,3 +107,8 @@ def user_api(auth_client: HttpClient) -> UserApi:
 @pytest.fixture
 def public_user_api(client: HttpClient) -> UserApi:
     return UserApi(client)
+
+
+@pytest.fixture
+def product_api(auth_client: HttpClient) -> ProductApi:
+    return ProductApi(auth_client)
