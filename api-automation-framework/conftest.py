@@ -1,7 +1,6 @@
 from collections.abc import Callable, Generator, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any
-from uuid import uuid4
 
 import pytest
 
@@ -17,6 +16,8 @@ from config.config import (
     load_config,
     load_database_config,
 )
+from utils.data_factory import DataFactory
+from utils.data_lifecycle import TestDataManager
 
 AuthenticatedApiSet = tuple[UserApi, ProductApi, OrderApi]
 AuthenticatedApiFactory = Callable[
@@ -56,6 +57,11 @@ def database_client(
 
 
 @pytest.fixture(scope="session")
+def data_factory() -> DataFactory:
+    return DataFactory()
+
+
+@pytest.fixture(scope="session")
 def client(config: Settings) -> Generator[HttpClient, None, None]:
     http_client = HttpClient(
         base_url=config.base_url,
@@ -71,13 +77,12 @@ def auth_api(client: HttpClient) -> AuthApi:
 
 
 @pytest.fixture(scope="session")
-def registered_user(auth_api: AuthApi) -> dict[str, Any]:
-    suffix = uuid4().hex
-    payload = {
-        "username": f"api_auto_{suffix}",
-        "email": f"api_auto_{suffix}@example.com",
-        "password": f"AutomationPassword_{suffix}",
-    }
+def registered_user(
+    auth_api: AuthApi,
+    data_factory: DataFactory,
+    database_client: DatabaseClient,
+) -> Generator[dict[str, Any], None, None]:
+    payload = data_factory.user_payload()
     response = auth_api.register(payload)
 
     assert response.status_code == 201, (
@@ -86,11 +91,16 @@ def registered_user(auth_api: AuthApi) -> dict[str, Any]:
     )
 
     response_body = response.json()
-    return {
+    user = {
         **payload,
         "id": response_body["id"],
         "is_active": response_body["is_active"],
     }
+    yield user
+    database_client.execute(
+        "DELETE FROM users WHERE id = %s",
+        (user["id"],),
+    )
 
 
 @pytest.fixture(scope="session")
@@ -145,6 +155,19 @@ def product_api(auth_client: HttpClient) -> ProductApi:
 @pytest.fixture
 def order_api(auth_client: HttpClient) -> OrderApi:
     return OrderApi(auth_client)
+
+
+@pytest.fixture
+def test_data(
+    database_client: DatabaseClient,
+    product_api: ProductApi,
+) -> Generator[TestDataManager, None, None]:
+    manager = TestDataManager(
+        database_client=database_client,
+        cleanup_product_api=product_api,
+    )
+    yield manager
+    manager.cleanup()
 
 
 @pytest.fixture

@@ -1,13 +1,14 @@
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 import allure
 import pytest
 
 from api.order_api import OrderApi
 from api.product_api import ProductApi
+from utils.data_factory import DataFactory
+from utils.data_lifecycle import TestDataManager
 from utils.yaml_util import load_yaml
 
 ORDER_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "order.yaml"
@@ -18,25 +19,27 @@ INVALID_QUANTITY_CASES = {
 
 
 def _create_product(
+    test_data: TestDataManager,
+    data_factory: DataFactory,
     product_api: ProductApi,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    unique_payload = {
-        **payload,
-        "name": f"{payload['name']} {uuid4().hex[:8]}",
-    }
-    response = product_api.create_product(unique_payload)
+    unique_payload = data_factory.product_payload(payload)
+    response = test_data.create_product(product_api, unique_payload)
     assert response.status_code == 201
     return response.json()
 
 
 def _create_order(
+    test_data: TestDataManager,
+    data_factory: DataFactory,
     order_api: OrderApi,
     product_id: int,
     quantity: int,
 ) -> dict[str, Any]:
-    response = order_api.create_order(
-        {"product_id": product_id, "quantity": quantity}
+    response = test_data.create_order(
+        order_api,
+        data_factory.order_payload(product_id, quantity),
     )
     assert response.status_code == 201
     return response.json()
@@ -49,12 +52,20 @@ def test_create_and_get_order(
     product_api: ProductApi,
     order_api: OrderApi,
     registered_user: dict[str, Any],
+    data_factory: DataFactory,
+    test_data: TestDataManager,
 ) -> None:
     case = ORDER_DATA["create_success"]
     allure.dynamic.title(f"{case['case_id']} - {case['title']}")
-    product = _create_product(product_api, case["product"])
+    product = _create_product(test_data, data_factory, product_api, case["product"])
 
-    order = _create_order(order_api, product["id"], case["request"]["quantity"])
+    order = _create_order(
+        test_data,
+        data_factory,
+        order_api,
+        product["id"],
+        case["request"]["quantity"],
+    )
 
     assert order["user_id"] == registered_user["id"]
     assert order["product_id"] == product["id"]
@@ -76,11 +87,19 @@ def test_create_and_get_order(
 def test_pay_order_and_reject_repeated_operations(
     product_api: ProductApi,
     order_api: OrderApi,
+    data_factory: DataFactory,
+    test_data: TestDataManager,
 ) -> None:
     case = ORDER_DATA["pay"]
     allure.dynamic.title(f"{case['case_id']} - {case['title']}")
-    product = _create_product(product_api, case["product"])
-    order = _create_order(order_api, product["id"], case["request"]["quantity"])
+    product = _create_product(test_data, data_factory, product_api, case["product"])
+    order = _create_order(
+        test_data,
+        data_factory,
+        order_api,
+        product["id"],
+        case["request"]["quantity"],
+    )
 
     pay_response = order_api.pay_order(order["id"])
     assert pay_response.status_code == 200
@@ -109,11 +128,19 @@ def test_pay_order_and_reject_repeated_operations(
 def test_cancel_order_restores_stock(
     product_api: ProductApi,
     order_api: OrderApi,
+    data_factory: DataFactory,
+    test_data: TestDataManager,
 ) -> None:
     case = ORDER_DATA["cancel"]
     allure.dynamic.title(f"{case['case_id']} - {case['title']}")
-    product = _create_product(product_api, case["product"])
-    order = _create_order(order_api, product["id"], case["request"]["quantity"])
+    product = _create_product(test_data, data_factory, product_api, case["product"])
+    order = _create_order(
+        test_data,
+        data_factory,
+        order_api,
+        product["id"],
+        case["request"]["quantity"],
+    )
 
     cancel_response = order_api.cancel_order(order["id"])
     assert cancel_response.status_code == 200
@@ -136,16 +163,19 @@ def test_cancel_order_restores_stock(
 def test_create_order_rejects_insufficient_stock(
     product_api: ProductApi,
     order_api: OrderApi,
+    data_factory: DataFactory,
+    test_data: TestDataManager,
 ) -> None:
     case = ORDER_DATA["insufficient_stock"]
     allure.dynamic.title(f"{case['case_id']} - {case['title']}")
-    product = _create_product(product_api, case["product"])
+    product = _create_product(test_data, data_factory, product_api, case["product"])
 
-    response = order_api.create_order(
-        {
-            "product_id": product["id"],
-            "quantity": case["request"]["quantity"],
-        }
+    response = test_data.create_order(
+        order_api,
+        data_factory.order_payload(
+            product["id"],
+            case["request"]["quantity"],
+        ),
     )
 
     assert response.status_code == case["expected_status"]
@@ -181,17 +211,22 @@ def test_create_order_rejects_missing_product(order_api: OrderApi) -> None:
 def test_create_order_rejects_invalid_quantity(
     product_api: ProductApi,
     order_api: OrderApi,
+    data_factory: DataFactory,
+    test_data: TestDataManager,
     case_id: str,
 ) -> None:
     case = INVALID_QUANTITY_CASES[case_id]
     allure.dynamic.title(f"{case_id} - {case['title']}")
     product = _create_product(
+        test_data,
+        data_factory,
         product_api,
         {"name": "Quantity Product", "price": 10.00, "stock": 5},
     )
 
-    response = order_api.create_order(
-        {"product_id": product["id"], "quantity": case["quantity"]}
+    response = test_data.create_order(
+        order_api,
+        data_factory.order_payload(product["id"], case["quantity"]),
     )
 
     assert response.status_code == case["expected_status"]

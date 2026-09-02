@@ -23,6 +23,8 @@
 - 使用认证 API Factory 支持 E2E Case 基于自身登录结果创建独立 Session
 - 使用 DatabaseClient 对订单关键状态执行 MySQL 参数化查询
 - 支持订单状态的 API Response + MySQL 双重断言
+- 使用 Faker 动态生成唯一用户、邮箱、商品和订单请求数据
+- 使用 TestDataManager 登记资源并在 Fixture teardown 中统一清理
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。API Object 负责描述业务接口如何调用，但不负责业务断言。Pytest Fixture 负责注册用户、登录、保存 Token、创建认证 Client，并在测试结束后关闭 Session。
@@ -39,6 +41,8 @@ Fixture scope：
 - `order_api`：function scope，订单和商品 ID 由测试步骤动态传入
 - `authenticated_api_factory`：function scope，根据 E2E 动态 Token 创建并自动关闭认证 Client
 - `database_client`：session scope，仅在 DB 测试请求时建立 MySQL 连接并在会话结束时关闭
+- `data_factory`：session scope，无状态地生成动态请求数据
+- `test_data`：function scope，记录当前 Case 创建的资源并在 Case 结束后清理
 
 当前调用链：
 
@@ -53,9 +57,9 @@ Test Case → Fixture → AuthApi / UserApi / ProductApi / OrderApi → HttpClie
 
 完整 E2E Case 位于 `tests/test_e2e_order_payment.py`，显式执行注册、登录、当前用户校验、创建商品、创建订单、支付前查询、支付和支付后查询。Token、Product ID、Order ID 均来自同一用例的前置响应；支付后还会通过参数化 SQL 查询 `orders.status`，与 API 的 `PAID` 结果进行双重验证。
 
-数据库配置只从 `.env` 或运行环境读取：`DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`，可选 `DB_CONNECT_TIMEOUT`。普通 API 测试不会主动加载这些配置，只有使用 `database_client` Fixture 的测试需要 MySQL。
+数据库配置只从 `.env` 或运行环境读取：`DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`，可选 `DB_CONNECT_TIMEOUT`。不创建业务数据的框架单元测试不会主动加载这些配置；执行带测试数据生命周期的接口测试时需要 MySQL。
 
-注册用户由 Fixture 动态生成，不依赖固定用户 ID，也不依赖用例执行顺序。当前被测服务还没有用户删除接口，完整测试数据清理将在测试数据生命周期 Sprint 中实现；本阶段验收使用一次性 MySQL 容器。
+注册用户和商品由 Faker 动态生成，不依赖固定 ID，也不依赖用例执行顺序。成功创建资源后会立即登记 ID，teardown 按外键关系执行：先通过数据库删除订单，再通过现有业务 API 删除商品，最后通过数据库删除测试用户。订单和用户当前没有业务删除接口，因此只对这两类数据使用数据库清理；清理失败会报告为测试错误，不会被静默忽略。
 
 ## 环境要求
 

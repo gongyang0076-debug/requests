@@ -65,3 +65,25 @@ def test_connection_error_does_not_expose_password(
 
     assert str(error.value) == "Unable to connect to MySQL"
     assert database_settings.password not in str(error.value)
+
+
+def test_execute_returns_affected_row_count(
+    database_settings: DatabaseSettings,
+) -> None:
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.execute.return_value = 1
+
+    with patch("common.database.pymysql.connect", return_value=connection):
+        with DatabaseClient(database_settings) as database_client:
+            affected_rows = database_client.execute(
+                "DELETE FROM orders WHERE id = %s",
+                (42,),
+            )
+
+    assert affected_rows == 1
+    connection.ping.assert_called_once_with()
+    cursor.execute.assert_called_once_with(
+        "DELETE FROM orders WHERE id = %s",
+        (42,),
+    )

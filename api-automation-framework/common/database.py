@@ -15,7 +15,7 @@ class DatabaseConnectionError(RuntimeError):
 
 
 class DatabaseClient:
-    """Execute parameterized read queries against MySQL."""
+    """Execute parameterized queries against MySQL."""
 
     def __init__(self, settings: DatabaseSettings) -> None:
         try:
@@ -43,6 +43,16 @@ class DatabaseClient:
             cursor.execute(query, params)
             row = cursor.fetchone()
         return row
+
+    def execute(
+        self,
+        query: str,
+        params: QueryParameters | None = None,
+    ) -> int:
+        self._connection.ping()
+        with self._connection.cursor() as cursor:
+            affected_rows = cursor.execute(query, params)
+        return affected_rows
 
     def close(self) -> None:
         self._connection.close()

@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from decimal import Decimal
-from uuid import uuid4
 
 import allure
 
@@ -11,6 +10,8 @@ from api.product_api import ProductApi
 from api.user_api import UserApi
 from common.database import DatabaseClient
 from common.logger import format_json
+from utils.data_factory import DataFactory
+from utils.data_lifecycle import TestDataManager
 
 AuthenticatedApiFactory = Callable[
     [str],
@@ -25,16 +26,13 @@ def test_register_to_paid_order_e2e(
     auth_api: AuthApi,
     authenticated_api_factory: AuthenticatedApiFactory,
     database_client: DatabaseClient,
+    data_factory: DataFactory,
+    test_data: TestDataManager,
 ) -> None:
-    suffix = uuid4().hex
-    user_payload = {
-        "username": f"e2e_{suffix}",
-        "email": f"e2e_{suffix}@example.com",
-        "password": f"E2EPassword_{suffix}",
-    }
+    user_payload = data_factory.user_payload("e2e")
 
     with allure.step("注册动态用户"):
-        register_response = auth_api.register(user_payload)
+        register_response = test_data.register_user(auth_api, user_payload)
         assert register_response.status_code == 201
         registered_user = register_response.json()
         user_id = registered_user["id"]
@@ -64,13 +62,16 @@ def test_register_to_paid_order_e2e(
             assert me_response.json()["id"] == user_id
 
         with allure.step("创建商品并动态获取 Product ID"):
-            product_response = product_api.create_product(
-                {
-                    "name": f"E2E Product {suffix[:8]}",
-                    "price": "29.90",
-                    "stock": 3,
-                    "status": "ACTIVE",
-                }
+            product_response = test_data.create_product(
+                product_api,
+                data_factory.product_payload(
+                    {
+                        "name": "E2E Product",
+                        "price": "29.90",
+                        "stock": 3,
+                        "status": "ACTIVE",
+                    }
+                ),
             )
             assert product_response.status_code == 201
             product = product_response.json()
@@ -78,8 +79,9 @@ def test_register_to_paid_order_e2e(
             assert product_id > 0
 
         with allure.step("创建订单并动态获取 Order ID"):
-            create_order_response = order_api.create_order(
-                {"product_id": product_id, "quantity": 2}
+            create_order_response = test_data.create_order(
+                order_api,
+                data_factory.order_payload(product_id, quantity=2),
             )
             assert create_order_response.status_code == 201
             order = create_order_response.json()
