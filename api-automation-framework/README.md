@@ -20,6 +20,7 @@
 - 生成包含 Epic、Feature、Story、Step 和附件的 Allure Results
 - 使用 Fixture 管理注册用户、JWT Token 和带认证 Session
 - 通过 Session Header 自动注入 `Authorization: Bearer ...`
+- 使用认证 API Factory 支持 E2E Case 基于自身登录结果创建独立 Session
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。API Object 负责描述业务接口如何调用，但不负责业务断言。Pytest Fixture 负责注册用户、登录、保存 Token、创建认证 Client，并在测试结束后关闭 Session。
@@ -34,6 +35,7 @@ Fixture scope：
 - `user_api`：function scope，每个测试获得一个新的轻量 API Object
 - `product_api`：function scope，复用认证 Client，但不在 API Object 中保存测试数据
 - `order_api`：function scope，订单和商品 ID 由测试步骤动态传入
+- `authenticated_api_factory`：function scope，根据 E2E 动态 Token 创建并自动关闭认证 Client
 
 当前调用链：
 
@@ -45,6 +47,8 @@ Test Case → Fixture → AuthApi / UserApi / ProductApi / OrderApi → HttpClie
 `Authorization`、`Token`、`Password` 和 `Cookie`（不区分大小写，并支持嵌套数据）。
 
 认证、商品和订单数据分别位于 `data/auth.yaml`、`data/product.yaml`、`data/order.yaml`。订单测试从商品创建响应动态获取 Product ID，再从订单创建响应动态获取 Order ID，不依赖固定数据库记录。
+
+完整 E2E Case 位于 `tests/test_e2e_order_payment.py`，显式执行注册、登录、当前用户校验、创建商品、创建订单、支付前查询、支付和支付后查询。Token、Product ID、Order ID 均来自同一用例的前置响应。
 
 注册用户由 Fixture 动态生成，不依赖固定用户 ID，也不依赖用例执行顺序。当前被测服务还没有用户删除接口，完整测试数据清理将在测试数据生命周期 Sprint 中实现；本阶段验收使用一次性 MySQL 容器。
 

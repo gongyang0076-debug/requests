@@ -1,4 +1,5 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 from uuid import uuid4
 
@@ -10,6 +11,12 @@ from api.product_api import ProductApi
 from api.user_api import UserApi
 from common.http_client import HttpClient
 from config.config import Settings, load_config
+
+AuthenticatedApiSet = tuple[UserApi, ProductApi, OrderApi]
+AuthenticatedApiFactory = Callable[
+    [str],
+    AbstractContextManager[AuthenticatedApiSet],
+]
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -118,3 +125,24 @@ def product_api(auth_client: HttpClient) -> ProductApi:
 @pytest.fixture
 def order_api(auth_client: HttpClient) -> OrderApi:
     return OrderApi(auth_client)
+
+
+@pytest.fixture
+def authenticated_api_factory(config: Settings) -> AuthenticatedApiFactory:
+    @contextmanager
+    def build(token: str) -> Iterator[AuthenticatedApiSet]:
+        http_client = HttpClient(
+            base_url=config.base_url,
+            timeout=config.timeout,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        try:
+            yield (
+                UserApi(http_client),
+                ProductApi(http_client),
+                OrderApi(http_client),
+            )
+        finally:
+            http_client.close()
+
+    return build
