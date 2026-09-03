@@ -13,8 +13,10 @@ AUTH_DATA: dict[str, list[AuthCase]] = load_yaml(AUTH_DATA_PATH)
 LOGIN_FAILURE_CASES = {
     case["case_id"]: case for case in AUTH_DATA["login_failure"]
 }
+pytestmark = [pytest.mark.auth, pytest.mark.regression]
 
 
+@pytest.mark.smoke
 @allure.epic("接口自动化测试")
 @allure.feature("认证")
 @allure.story("注册并登录")

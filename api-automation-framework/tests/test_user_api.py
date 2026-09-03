@@ -1,10 +1,15 @@
 from typing import Any
 
 import allure
+import pytest
 
 from api.user_api import UserApi
 
 
+pytestmark = [pytest.mark.user, pytest.mark.regression]
+
+
+@pytest.mark.smoke
 @allure.epic("接口自动化测试")
 @allure.feature("用户管理")
 @allure.story("查询当前用户")

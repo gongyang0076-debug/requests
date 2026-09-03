@@ -16,6 +16,7 @@ ORDER_DATA: dict[str, Any] = load_yaml(ORDER_DATA_PATH)
 INVALID_QUANTITY_CASES = {
     case["case_id"]: case for case in ORDER_DATA["invalid_quantity"]
 }
+pytestmark = [pytest.mark.order, pytest.mark.regression]
 
 
 def _create_product(
@@ -45,6 +46,7 @@ def _create_order(
     return response.json()
 
 
+@pytest.mark.smoke
 @allure.epic("接口自动化测试")
 @allure.feature("订单管理")
 @allure.story("创建并查询订单")

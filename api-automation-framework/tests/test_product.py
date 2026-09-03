@@ -19,6 +19,14 @@ CREATE_SUCCESS_CASES = {
 CREATE_INVALID_CASES = {
     case["case_id"]: case for case in PRODUCT_DATA["create_invalid"]
 }
+CREATE_SUCCESS_PARAMS = [
+    pytest.param(
+        case_id,
+        marks=pytest.mark.smoke if case["category"] == "normal" else (),
+    )
+    for case_id, case in CREATE_SUCCESS_CASES.items()
+]
+pytestmark = [pytest.mark.product, pytest.mark.regression]
 
 
 def _assert_product(body: dict[str, Any], expected: dict[str, Any]) -> None:
@@ -31,7 +39,7 @@ def _assert_product(body: dict[str, Any], expected: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize(
     "case_id",
-    CREATE_SUCCESS_CASES,
+    CREATE_SUCCESS_PARAMS,
     ids=list(CREATE_SUCCESS_CASES),
 )
 @allure.epic("接口自动化测试")

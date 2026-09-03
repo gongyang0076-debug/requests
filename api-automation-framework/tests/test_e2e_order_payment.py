@@ -3,6 +3,7 @@ from contextlib import AbstractContextManager
 from decimal import Decimal
 
 import allure
+import pytest
 
 from api.auth_api import AuthApi
 from api.order_api import OrderApi
@@ -17,6 +18,7 @@ AuthenticatedApiFactory = Callable[
     [str],
     AbstractContextManager[tuple[UserApi, ProductApi, OrderApi]],
 ]
+pytestmark = [pytest.mark.regression, pytest.mark.e2e, pytest.mark.db]
 
 
 @allure.epic("接口自动化测试")

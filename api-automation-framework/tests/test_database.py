@@ -7,6 +7,9 @@ from common.database import DatabaseClient, DatabaseConnectionError
 from config.config import DatabaseSettings
 
 
+pytestmark = pytest.mark.db
+
+
 @pytest.fixture
 def database_settings() -> DatabaseSettings:
     return DatabaseSettings(

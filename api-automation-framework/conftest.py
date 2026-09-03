@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from api.auth_api import AuthApi
+from api.health_api import HealthApi
 from api.order_api import OrderApi
 from api.product_api import ProductApi
 from api.user_api import UserApi
@@ -74,6 +75,11 @@ def client(config: Settings) -> Generator[HttpClient, None, None]:
 @pytest.fixture(scope="session")
 def auth_api(client: HttpClient) -> AuthApi:
     return AuthApi(client)
+
+
+@pytest.fixture(scope="session")
+def health_api(client: HttpClient) -> HealthApi:
+    return HealthApi(client)
 
 
 @pytest.fixture(scope="session")

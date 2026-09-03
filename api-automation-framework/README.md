@@ -27,6 +27,7 @@
 - 使用 TestDataManager 登记资源并在 Fixture teardown 中统一清理
 - 覆盖缺失参数、超长字符串、非法枚举、错误 Token 和订单越权
 - 验证 SQL Injection 输入按普通数据处理，并拒绝商品名称中的原始 HTML/XSS 标记
+- 使用 Pytest Marker 分离 Smoke、Regression、业务域、E2E 和数据库测试
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。API Object 负责描述业务接口如何调用，但不负责业务断言。Pytest Fixture 负责注册用户、登录、保存 Token、创建认证 Client，并在测试结束后关闭 Session。
@@ -89,6 +90,39 @@ python -m pip install -r requirements.txt
 ```powershell
 python -m pytest -v
 ```
+
+快速验证健康检查和登录、当前用户、创建商品、创建订单等核心链路：
+
+```powershell
+python -m pytest -v -m smoke
+```
+
+执行完整接口回归集合：
+
+```powershell
+python -m pytest -v -m regression
+```
+
+组合执行 Smoke 和完整 E2E：
+
+```powershell
+python -m pytest -v -m "smoke or e2e"
+```
+
+也可以按业务域执行：
+
+```powershell
+python -m pytest -v -m auth
+python -m pytest -v -m user
+python -m pytest -v -m product
+python -m pytest -v -m order
+python -m pytest -v -m db
+```
+
+`smoke` 只覆盖最短核心检查，`regression` 覆盖全部接口行为场景；
+框架内部的配置、日志、HTTP Client、数据工厂等单元测试由不带 `-m` 的全量
+`pytest` 执行。`pytest.ini` 启用了 strict markers，测试代码中拼错或未注册的
+Marker 会直接导致收集失败。
 
 生成 Allure 原始结果：
 

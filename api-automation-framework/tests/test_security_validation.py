@@ -39,6 +39,7 @@ PLACEHOLDERS: dict[str, Any] = {
     "$overlong_username": "u" * 51,
     "$overlong_product_name": "P" * 101,
 }
+pytestmark = pytest.mark.regression
 
 
 def _resolve_payload(
@@ -64,6 +65,7 @@ def _assert_validation_error(response: Response, case: SecurityCase) -> None:
     )
 
 
+@pytest.mark.auth
 @pytest.mark.parametrize(
     "case_id",
     AUTH_REGISTRATION_CASES,
@@ -86,6 +88,7 @@ def test_registration_rejects_invalid_payload(
     _assert_validation_error(response, case)
 
 
+@pytest.mark.auth
 @pytest.mark.parametrize(
     "case_id",
     AUTH_LOGIN_CASES,
@@ -107,6 +110,7 @@ def test_login_treats_sql_injection_as_plain_input(
     assert response.json() == {"detail": case["expected_detail"]}
 
 
+@pytest.mark.product
 @pytest.mark.parametrize(
     "case_id",
     PRODUCT_INVALID_CASES,
@@ -129,6 +133,7 @@ def test_product_rejects_invalid_payload(
     _assert_validation_error(response, case)
 
 
+@pytest.mark.order
 @pytest.mark.parametrize(
     "case_id",
     ORDER_INVALID_CASES,
@@ -159,6 +164,7 @@ def test_order_rejects_invalid_payload(
     _assert_validation_error(response, case)
 
 
+@pytest.mark.auth
 @pytest.mark.parametrize("resource", ("product", "order"))
 @allure.epic("接口自动化测试")
 @allure.feature("异常与安全输入")
@@ -177,6 +183,7 @@ def test_missing_token_is_rejected_by_protected_resources(
     assert response.json() == {"detail": "Not authenticated"}
 
 
+@pytest.mark.auth
 @pytest.mark.parametrize("resource", ("user", "product", "order"))
 @allure.epic("接口自动化测试")
 @allure.feature("异常与安全输入")
@@ -201,6 +208,7 @@ def test_invalid_token_is_rejected_by_protected_resources(
     assert response.json() == {"detail": "Invalid or expired token"}
 
 
+@pytest.mark.order
 @allure.epic("接口自动化测试")
 @allure.feature("异常与安全输入")
 @allure.story("订单越权访问")
@@ -255,6 +263,8 @@ def test_order_is_not_accessible_to_another_user(
     assert owner_response.json()["status"] == "CREATED"
 
 
+@pytest.mark.product
+@pytest.mark.db
 @allure.epic("接口自动化测试")
 @allure.feature("异常与安全输入")
 @allure.story("SQL Injection 输入")
