@@ -1,6 +1,7 @@
 allure-pytest==2.16.0
 Faker==40.38.0
 pytest==8.4.1
+pytest-xdist==3.8.0
 python-dotenv==1.2.3
 PyMySQL==1.2.0
 PyYAML==6.0.3

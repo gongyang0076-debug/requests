@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -68,13 +69,24 @@ def format_json(value: Any, *, pretty: bool = False) -> str:
     )
 
 
+def get_log_file() -> Path:
+    """Return a process-specific log file when pytest-xdist is active."""
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    if not worker_id:
+        return LOG_FILE
+
+    safe_worker_id = re.sub(r"[^a-zA-Z0-9_-]", "_", worker_id)
+    return LOG_FILE.with_name(f"api_test_{safe_worker_id}.log")
+
+
 def get_logger() -> logging.Logger:
     """Return the framework logger with one console and one file handler."""
     logger = logging.getLogger(LOGGER_NAME)
     if logger.handlers:
         return logger
 
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    log_file = get_log_file()
+    log_file.parent.mkdir(parents=True, exist_ok=True)
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
@@ -87,7 +99,7 @@ def get_logger() -> logging.Logger:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 

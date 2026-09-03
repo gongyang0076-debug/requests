@@ -16,7 +16,7 @@
 - 使用 YAML 分离用户测试数据与测试逻辑
 - 使用 `pytest.mark.parametrize` 执行多条带 Case ID 的用例
 - 统一记录脱敏后的 HTTP Request、Response、Failure 和耗时
-- 同时输出控制台日志与 `logs/api_test.log` 文件日志
+- 同时输出控制台日志与文件日志；串行使用 `logs/api_test.log`，并行按 worker 分文件
 - 生成包含 Epic、Feature、Story、Step 和附件的 Allure Results
 - 使用 Fixture 管理注册用户、JWT Token 和带认证 Session
 - 通过 Session Header 自动注入 `Authorization: Bearer ...`
@@ -28,6 +28,7 @@
 - 覆盖缺失参数、超长字符串、非法枚举、错误 Token 和订单越权
 - 验证 SQL Injection 输入按普通数据处理，并拒绝商品名称中的原始 HTML/XSS 标记
 - 使用 Pytest Marker 分离 Smoke、Regression、业务域、E2E 和数据库测试
+- 支持通过 pytest-xdist 显式并行执行相互独立的测试
 - 验证 HTTP 状态码、JSON 响应和关键业务字段
 
 `HttpClient` 负责组合 Base URL、应用默认超时并把 headers、cookies、params、json 和 data 传递给 Requests。API Object 负责描述业务接口如何调用，但不负责业务断言。Pytest Fixture 负责注册用户、登录、保存 Token、创建认证 Client，并在测试结束后关闭 Session。
@@ -123,6 +124,25 @@ python -m pytest -v -m db
 框架内部的配置、日志、HTTP Client、数据工厂等单元测试由不带 `-m` 的全量
 `pytest` 执行。`pytest.ini` 启用了 strict markers，测试代码中拼错或未注册的
 Marker 会直接导致收集失败。
+
+测试数据均动态生成且由 function scope 的 `test_data` 独立登记、清理，因此可以
+选择使用 4 个 worker 并行执行回归集合：
+
+```powershell
+python -m pytest -v -n 4 -m regression
+```
+
+也可以让 pytest-xdist 根据可用物理 CPU 核心数选择 worker 数量：
+
+```powershell
+python -m pytest -v -n auto -m regression
+```
+
+并行是显式启用的能力，没有写入 `pytest.ini`，以便调试失败时仍可直接串行复现。
+CI 的 Smoke 集合规模较小，继续串行执行，避免进程启动开销。当前没有发现可归类为
+网络抖动的偶发失败，因此未引入 `pytest-rerunfailures`；重试不应用来掩盖真实缺陷。
+并行执行时日志分别写入 `logs/api_test_gw0.log`、`logs/api_test_gw1.log` 等文件，
+避免多个进程竞争同一个日志句柄；串行日志文件名保持不变。
 
 生成 Allure 原始结果：
 

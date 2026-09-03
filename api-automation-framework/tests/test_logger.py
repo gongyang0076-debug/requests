@@ -1,4 +1,19 @@
-from common.logger import MASK, sanitize_data, sanitize_text, sanitize_url
+from common.logger import (
+    LOG_FILE,
+    MASK,
+    get_log_file,
+    sanitize_data,
+    sanitize_text,
+    sanitize_url,
+)
+
+
+def test_get_log_file_uses_xdist_worker_id(monkeypatch) -> None:
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    assert get_log_file() == LOG_FILE
+
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw2")
+    assert get_log_file() == LOG_FILE.with_name("api_test_gw2.log")
 
 
 def test_sanitize_data_redacts_nested_sensitive_values() -> None:
