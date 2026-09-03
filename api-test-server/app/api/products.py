@@ -7,6 +7,7 @@ from app.api.dependencies import get_current_user, get_database_session
 from app.models import User
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 from app.services.product_service import (
+    ProductInUseError,
     ProductNotFoundError,
     create_product,
     delete_product,
@@ -21,6 +22,13 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 def _not_found(exc: ProductNotFoundError) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
+        detail=str(exc),
+    )
+
+
+def _conflict(exc: ProductInUseError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
         detail=str(exc),
     )
 
@@ -80,4 +88,6 @@ def delete(
         delete_product(session, product_id)
     except ProductNotFoundError as exc:
         raise _not_found(exc) from exc
+    except ProductInUseError as exc:
+        raise _conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

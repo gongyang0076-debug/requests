@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
-from app.models import Product
+from app.models import Order, Product
 
 AuthenticatedProductClient: TypeAlias = tuple[TestClient, dict[str, str], str]
 
@@ -25,6 +25,17 @@ def authenticated_product_client(
         yield client, headers, product_prefix
     finally:
         with Session(engine) as session:
+            product_ids = list(
+                session.scalars(
+                    select(Product.id).where(
+                        Product.name.like(f"{product_prefix}%")
+                    )
+                )
+            )
+            if product_ids:
+                session.execute(
+                    delete(Order).where(Order.product_id.in_(product_ids))
+                )
             session.execute(
                 delete(Product).where(Product.name.like(f"{product_prefix}%"))
             )
@@ -99,6 +110,44 @@ def test_product_crud_and_database_persistence(
     missing_response = client.get(f"/api/products/{product_id}", headers=headers)
     assert missing_response.status_code == 404
     assert missing_response.json() == {"detail": "Product not found"}
+
+
+def test_delete_product_with_existing_order_returns_409(
+    authenticated_product_client: AuthenticatedProductClient,
+) -> None:
+    client, headers, product_prefix = authenticated_product_client
+    product_response = client.post(
+        "/api/products",
+        json={
+            "name": f"{product_prefix}_in_use",
+            "price": "15.00",
+            "stock": 2,
+            "status": "ACTIVE",
+        },
+        headers=headers,
+    )
+    assert product_response.status_code == 201
+    product_id = product_response.json()["id"]
+
+    order_response = client.post(
+        "/api/orders",
+        json={"product_id": product_id, "quantity": 1},
+        headers=headers,
+    )
+    assert order_response.status_code == 201
+    order_id = order_response.json()["id"]
+
+    delete_response = client.delete(f"/api/products/{product_id}", headers=headers)
+
+    assert delete_response.status_code == 409
+    assert delete_response.json() == {
+        "detail": "Product cannot be deleted because it has existing orders"
+    }
+
+    engine: Engine = client.app.state.db_engine
+    with Session(engine) as session:
+        assert session.get(Product, product_id) is not None
+        assert session.get(Order, order_id) is not None
 
 
 @pytest.mark.parametrize("price", ["0", "-0.01"])
