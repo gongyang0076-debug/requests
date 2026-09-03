@@ -1,0 +1,129 @@
+name: API Automation Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-smoke:
+    name: API Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      TEST_ENV: test
+      API_BASE_URL: http://127.0.0.1:8000
+      API_TIMEOUT: "10"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_USER: api_test_user
+      DB_PASSWORD: ci-db-${{ github.run_id }}-${{ github.run_attempt }}
+      DB_NAME: api_test
+      DB_CONNECT_TIMEOUT: "5"
+      JWT_SECRET_KEY: ci-jwt-${{ github.run_id }}-${{ github.run_attempt }}-only-for-api-tests
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-${{ github.run_id }}-${{ github.run_attempt }}
+          MYSQL_DATABASE: api_test
+          MYSQL_USER: api_test_user
+          MYSQL_PASSWORD: ci-db-${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping --host=127.0.0.1 --user=root --password=ci-root-${{ github.run_id }}-${{ github.run_attempt }} --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            api-test-server/requirements.txt
+            api-automation-framework/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            -r api-test-server/requirements.txt \
+            -r api-automation-framework/requirements.txt
+          python -m pip check
+
+      - name: Run test server tests
+        working-directory: api-test-server
+        run: python -m pytest -v -W error
+
+      - name: Start FastAPI test server
+        working-directory: api-test-server
+        run: |
+          nohup python -m uvicorn app.main:app \
+            --host 127.0.0.1 \
+            --port 8000 \
+            > server.log 2>&1 &
+          echo $! > server.pid
+
+      - name: Wait for FastAPI and MySQL
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/health/db > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat api-test-server/server.log
+          exit 1
+
+      - name: Run smoke tests
+        working-directory: api-automation-framework
+        run: >-
+          python -m pytest -v -W error --env=test -m smoke
+          --alluredir=allure-results --clean-alluredir
+
+      - name: Stop FastAPI test server
+        if: always()
+        working-directory: api-test-server
+        run: |
+          if [[ -f server.pid ]]; then
+            server_pid=$(cat server.pid)
+            if kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid"
+              wait "$server_pid" || true
+            fi
+          fi
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: api-test-results-${{ github.run_id }}
+          path: |
+            api-automation-framework/allure-results
+            api-automation-framework/logs/api_test.log
+            api-test-server/server.log
+          if-no-files-found: warn
+          retention-days: 14

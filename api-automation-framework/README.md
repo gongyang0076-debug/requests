@@ -158,3 +158,30 @@ API_BASE_URL / API_TIMEOUT → config/config.yaml
 ```
 
 `test` 默认调用 `http://127.0.0.1:8000`，`pre` 默认调用 `http://127.0.0.1:8001`。URL 只存在于配置文件或环境变量中，不写在测试代码里。
+
+## CI
+
+GitHub Actions 工作流位于项目根目录的 `.github/workflows/api-test.yml`，在以下情况执行：
+
+- 推送到 `main`
+- 向 `main` 提交 Pull Request
+- 在 Actions 页面手动触发
+
+流水线使用 Ubuntu Runner、Python 3.11 和 MySQL 8.4 Service Container，执行顺序为：
+
+```text
+Checkout
+→ 安装两个项目的依赖
+→ 执行 FastAPI 服务自身测试
+→ 启动 FastAPI
+→ 等待 /health/db
+→ 执行 pytest -m smoke
+→ 上传 Allure Results、HTTP 日志和服务日志
+```
+
+MySQL 和 JWT 凭据由当前 GitHub `run_id`、`run_attempt` 动态组合，仅在隔离的 CI
+运行期间使用，不依赖本地 `.env`，也不包含生产密码。连接真实外部环境时，应改用
+GitHub Repository/Environment Secrets，不要把真实密码写入 Workflow。
+
+Allure Results 和日志无论测试成功或失败都会上传，保留 14 天。Smoke Test 失败时
+Job 会保持失败状态，后续的服务清理和产物上传不会掩盖原始测试结果。
