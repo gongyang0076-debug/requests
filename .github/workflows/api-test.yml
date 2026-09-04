@@ -76,6 +76,7 @@ jobs:
           from pathlib import Path
 
           source = r'''
+          import ast
           import json
           import os
           from pathlib import Path
@@ -85,7 +86,7 @@ jobs:
 
           MASK = "[REDACTED]"
           LIMIT = 32 * 1024 * 1024
-          KEY = r"(?:[\w-]*(?:password|token)|authorization|bearer[ _-]+token|(?:set-)?cookie|jwt[_-]?secret[_-]?key)"
+          KEY = r"(?:[\w-]*(?:password|passwd|token|secret|api[_-]?key)|authorization|bearer[ _-]+token|(?:set-)?cookie|jwt[_-]?secret[_-]?key)"
           FIELD = re.compile(
               rf"""(?i)(?P<prefix>(?<![\w-])['"]?{KEY}['"]?\s*[:=]\s*)"""
               r"""(?P<value>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\[REDACTED(?:_JWT)?\]|[^\r\n,;}\]]+)"""
@@ -97,11 +98,84 @@ jobs:
           JWT = re.compile(r"(?<![\w.-])[\w-]{5,}\.[\w-]{3,}\.[\w-]{3,}(?![\w.-])", re.ASCII)
           BEARER = re.compile(r"(?i)\bBearer[ \t]+(?!\[REDACTED)[^\s'\",;}\]]+")
           ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+          QUOTED = re.compile(r""""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""", re.S)
+
+          def sensitive_validation(value):
+              location = value.get("loc")
+              return (isinstance(location, (list, tuple)) and bool(location)
+                      and isinstance(location[-1], str)
+                      and re.fullmatch(KEY, location[-1], re.I) is not None)
+
+          def validation_data(value):
+              if isinstance(value, dict):
+                  sensitive = sensitive_validation(value)
+                  return {key: MASK if key == "input" and sensitive else validation_data(item)
+                          for key, item in value.items()}
+              if isinstance(value, (list, tuple)):
+                  return type(value)(validation_data(item) for item in value)
+              return validation_text(value) if isinstance(value, str) else value
+
+          def literal_end(text, start):
+              # Locate complete JSON / Python repr literals, respecting escaped quotes.
+              stack = []
+              index = start
+              while index < len(text):
+                  char = text[index]
+                  if char in "\"'":
+                      quoted = QUOTED.match(text, index)
+                      if quoted is None:
+                          return None
+                      index = quoted.end()
+                      if not stack:
+                          return index
+                      continue
+                  if char in "{[":
+                      stack.append("}" if char == "{" else "]")
+                  elif char in "}]":
+                      if not stack or stack.pop() != char:
+                          return None
+                      if not stack:
+                          return index + 1
+                  index += 1
+              return None
+
+          def validation_text(text):
+              # Decode embedded objects and quoted JSON strings before matching loc/input.
+              output = []
+              cursor = 0
+              index = 0
+              while index < len(text):
+                  if text[index] not in "{[\"'":
+                      index += 1
+                      continue
+                  end = literal_end(text, index)
+                  if end is None:
+                      index += 1
+                      continue
+                  literal = text[index:end]
+                  try:
+                      value = json.loads(literal)
+                      encode = json.dumps
+                  except ValueError:
+                      try:
+                          value = ast.literal_eval(literal)
+                          encode = repr
+                      except (ValueError, SyntaxError):
+                          index += 1
+                          continue
+                  clean = validation_data(value)
+                  if clean != value:
+                      output.extend((text[cursor:index], encode(clean)))
+                      cursor = end
+                  index = end
+              output.append(text[cursor:])
+              return "".join(output)
 
           def redact(text):
               text = ANSI.sub("", text)
               if "\x1b" in text:
                   raise ValueError("Unsupported terminal escape sequence")
+              text = validation_text(text)
               secrets = set()
               for name in ("DB_PASSWORD", "JWT_SECRET_KEY"):
                   value = os.environ.get(name)
@@ -126,8 +200,11 @@ jobs:
           def redact_json(value):
               if isinstance(value, dict):
                   parameter = isinstance(value.get("name"), str) and re.fullmatch(KEY, value["name"], re.I)
+                  sensitive_input = sensitive_validation(value)
                   return {
-                      redact(key): MASK if re.fullmatch(KEY, key, re.I) or (parameter and key == "value")
+                      redact(key): MASK if (re.fullmatch(KEY, key, re.I)
+                                           or (parameter and key == "value")
+                                           or (sensitive_input and key == "input"))
                       else redact_json(item)
                       for key, item in value.items()
                   }

@@ -1,5 +1,8 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+import io
+import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +15,7 @@ from api.order_api import OrderApi
 from api.product_api import ProductApi
 from api.user_api import UserApi
 from common.database import DatabaseClient
+from common.logger import get_logger, sanitize_data
 from utils.data_factory import DataFactory
 from utils.data_lifecycle import TestDataManager
 from utils.yaml_util import load_yaml
@@ -86,6 +90,61 @@ def test_registration_rejects_invalid_payload(
     response = test_data.register_user(auth_api, payload)
 
     _assert_validation_error(response, case)
+
+
+@pytest.mark.auth
+@pytest.mark.parametrize("case_id", ("password_too_short", "password_too_long"))
+@allure.epic("接口自动化测试")
+@allure.feature("异常与安全输入")
+@allure.story("422 敏感校验输入脱敏")
+def test_registration_validation_password_is_redacted(
+    auth_api: AuthApi,
+    data_factory: DataFactory,
+    test_data: TestDataManager,
+    monkeypatch: pytest.MonkeyPatch,
+    case_id: str,
+) -> None:
+    # Parametrize by case ID, not by password: Allure parameters stay non-sensitive.
+    password = "B1shrt!" if case_id == "password_too_short" else "B1_LONG_SYNTHETIC_" + "x" * 129
+    expected_type = "string_too_short" if case_id == "password_too_short" else "string_too_long"
+    payload = data_factory.user_payload("validation_redaction")
+    payload["password"] = password
+    captured_log = io.StringIO()
+    handler = logging.StreamHandler(captured_log)
+    logger = get_logger()
+    attachments: dict[str, str] = {}
+    original_attach = allure.attach
+
+    def capture_attachment(body, name=None, attachment_type=None, extension=None):
+        attachments[name] = body
+        return original_attach(body, name=name, attachment_type=attachment_type, extension=extension)
+
+    monkeypatch.setattr("common.http_client.allure.attach", capture_attachment)
+    logger.addHandler(handler)
+    try:
+        response = test_data.register_user(auth_api, payload)
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+
+    assert response.status_code == 422
+    raw = response.json()
+    error = next(item for item in raw["detail"] if item["loc"][-1] == "password")
+    assert error["type"] == expected_type
+    # Prove the source contains the value; a negative-only check could pass vacuously.
+    assert error["input"] == password
+    sanitized = sanitize_data(raw)
+    clean_error = next(item for item in sanitized["detail"] if item["loc"][-1] == "password")
+    assert clean_error["input"] == "[REDACTED]"
+    assert password not in json.dumps(sanitized)
+    assert "HTTP Response" in captured_log.getvalue()
+    assert "[REDACTED]" in captured_log.getvalue()
+    assert password not in captured_log.getvalue()
+    assert {"HTTP Request", "HTTP Response"} <= attachments.keys()
+    assert all(password not in body for body in attachments.values())
+    recorded = json.loads(attachments["HTTP Response"])["body"]
+    recorded_error = next(item for item in recorded["detail"] if item["loc"][-1] == "password")
+    assert recorded_error["input"] == "[REDACTED]"
 
 
 @pytest.mark.auth

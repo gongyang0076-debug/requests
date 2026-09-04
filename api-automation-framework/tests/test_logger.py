@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from common.logger import (
     LOG_FILE,
     MASK,
@@ -58,3 +62,25 @@ def test_sanitize_text_redacts_sensitive_exception_details() -> None:
     )
 
     assert sanitized == "request failed: token=*** password: ***"
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("password", "passwd", "token", "access_token", "refresh_token",
+     "Authorization", "secret", "api_key"),
+)
+def test_sensitive_validation_input_is_redacted(field: str) -> None:
+    raw = {"detail": [{"loc": ["body", field], "input": "B1_SYNTHETIC_INPUT"}]}
+    assert "B1_SYNTHETIC_INPUT" in json.dumps(raw)
+
+    sanitized = sanitize_data(raw)
+
+    assert sanitized["detail"][0]["input"] == "[REDACTED]"
+    assert "B1_SYNTHETIC_INPUT" not in json.dumps(sanitized)
+    assert raw["detail"][0]["input"] == "B1_SYNTHETIC_INPUT"
+
+
+@pytest.mark.parametrize("location", (["body", "username"], [], None, "password"))
+def test_non_sensitive_validation_input_is_preserved(location: object) -> None:
+    raw = {"loc": location, "input": "abc"}
+    assert sanitize_data(raw) == raw

@@ -12,7 +12,9 @@ LOGGER_NAME = "api_automation"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOG_FILE = PROJECT_ROOT / "logs" / "api_test.log"
 
-_SENSITIVE_KEY_PARTS = ("authorization", "token", "password", "cookie")
+_SENSITIVE_KEY_PARTS = (
+    "authorization", "token", "password", "passwd", "secret", "apikey", "cookie",
+)
 _SENSITIVE_TEXT_PATTERN = re.compile(
     r"(?i)\b(authorization|access[_-]?token|refresh[_-]?token|token|password|"
     r"set-cookie|cookie)\b(\s*[:=]\s*)(?:bearer\s+)?([^\s,;&]+)"
@@ -27,8 +29,15 @@ def _is_sensitive_key(key: object) -> bool:
 def sanitize_data(value: Any) -> Any:
     """Recursively replace sensitive values while preserving useful structure."""
     if isinstance(value, Mapping):
+        location = value.get("loc")
+        sensitive_input = (
+            isinstance(location, (list, tuple))
+            and bool(location)
+            and _is_sensitive_key(location[-1])
+        )
         return {
-            str(key): MASK if _is_sensitive_key(key) else sanitize_data(item)
+            str(key): "[REDACTED]" if key == "input" and sensitive_input
+            else MASK if _is_sensitive_key(key) else sanitize_data(item)
             for key, item in value.items()
         }
 
