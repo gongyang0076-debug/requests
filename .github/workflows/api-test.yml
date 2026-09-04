@@ -18,9 +18,12 @@ concurrency:
 
 jobs:
   api-smoke:
-    name: API Smoke Test
+    name: API Acceptance Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
 
     env:
       PYTHONUNBUFFERED: "1"
@@ -30,25 +33,25 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: "3306"
       DB_USER: api_test_user
-      DB_PASSWORD: ci-db-${{ github.run_id }}-${{ github.run_attempt }}
+      DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
       DB_NAME: api_test
       DB_CONNECT_TIMEOUT: "5"
-      JWT_SECRET_KEY: ci-jwt-${{ github.run_id }}-${{ github.run_attempt }}-only-for-api-tests
+      JWT_SECRET_KEY: ${{ secrets.CI_JWT_SECRET_KEY }}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: "30"
 
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:8.4.5
         env:
-          MYSQL_ROOT_PASSWORD: ci-root-${{ github.run_id }}-${{ github.run_attempt }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.CI_MYSQL_ROOT_PASSWORD }}
           MYSQL_DATABASE: api_test
           MYSQL_USER: api_test_user
-          MYSQL_PASSWORD: ci-db-${{ github.run_id }}-${{ github.run_attempt }}
+          MYSQL_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping --host=127.0.0.1 --user=root --password=ci-root-${{ github.run_id }}-${{ github.run_attempt }} --silent"
+          --health-cmd "mysqladmin ping --host=127.0.0.1 --silent"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -66,17 +69,209 @@ jobs:
             api-test-server/requirements.txt
             api-automation-framework/requirements.txt
 
+      - name: Create temporary CI redactor
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          source = r'''
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+          import sys
+
+          MASK = "[REDACTED]"
+          LIMIT = 32 * 1024 * 1024
+          KEY = r"(?:[\w-]*(?:password|token)|authorization|bearer[ _-]+token|(?:set-)?cookie|jwt[_-]?secret[_-]?key)"
+          FIELD = re.compile(
+              rf"""(?i)(?P<prefix>(?<![\w-])['"]?{KEY}['"]?\s*[:=]\s*)"""
+              r"""(?P<value>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\[REDACTED(?:_JWT)?\]|[^\r\n,;}\]]+)"""
+          )
+          ESCAPED_FIELD = re.compile(
+              rf"""(?i)(?P<prefix>(?<![\w-])(?:\\*['"])?{KEY}\\+['"]\s*[:=]\s*"""
+              rf"""|(?<![\w-])['"]?{KEY}['"]?\s*[:=]\s*\\+['"])[^\r\n]*"""
+          )
+          JWT = re.compile(r"(?<![\w.-])[\w-]{5,}\.[\w-]{3,}\.[\w-]{3,}(?![\w.-])", re.ASCII)
+          BEARER = re.compile(r"(?i)\bBearer[ \t]+(?!\[REDACTED)[^\s'\",;}\]]+")
+          ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+          def redact(text):
+              text = ANSI.sub("", text)
+              if "\x1b" in text:
+                  raise ValueError("Unsupported terminal escape sequence")
+              secrets = set()
+              for name in ("DB_PASSWORD", "JWT_SECRET_KEY"):
+                  value = os.environ.get(name)
+                  if value:
+                      secrets.update((value, repr(value)[1:-1],
+                                      json.dumps(value)[1:-1],
+                                      json.dumps(value, ensure_ascii=False)[1:-1]))
+              for value in sorted(secrets, key=len, reverse=True):
+                  if value:
+                      text = text.replace(value, MASK)
+              # Escaped JSON embedded in repr/logs: withhold the rest of the line,
+              # rather than guessing where an arbitrarily escaped value ends.
+              text = ESCAPED_FIELD.sub(lambda match: match["prefix"] + MASK, text)
+              def replace_field(match):
+                  value = match["value"]
+                  quote = value[0] if value[0] in "\"'" else ""
+                  return match["prefix"] + quote + MASK + quote
+              text = FIELD.sub(replace_field, text)
+              text = JWT.sub("[REDACTED_JWT]", text)
+              return BEARER.sub("Bearer " + MASK, text)
+
+          def redact_json(value):
+              if isinstance(value, dict):
+                  parameter = isinstance(value.get("name"), str) and re.fullmatch(KEY, value["name"], re.I)
+                  return {
+                      redact(key): MASK if re.fullmatch(KEY, key, re.I) or (parameter and key == "value")
+                      else redact_json(item)
+                      for key, item in value.items()
+                  }
+              if isinstance(value, list):
+                  return [redact_json(item) for item in value]
+              return redact(value) if isinstance(value, str) else value
+
+          def read_text(stream):
+              data = stream.read(LIMIT + 1)
+              if len(data) > LIMIT:
+                  raise ValueError("Text exceeds the safe processing limit")
+              text = data.decode("utf-8-sig")
+              if any(ord(char) < 32 and char not in "\t\r\n\x1b" for char in text):
+                  raise ValueError("Not a supported text file")
+              return text
+
+          def artifacts():
+              workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve(strict=True)
+              temporary = Path(os.environ["RUNNER_TEMP"]).resolve(strict=True)
+              safe = temporary / "ci-artifacts-safe"
+              if safe.is_symlink() or safe.resolve().parent != temporary:
+                  raise ValueError("Unsafe staging directory")
+              if safe.exists():
+                  shutil.rmtree(safe)
+              safe.mkdir()
+              patterns = (
+                  "api-test-server/database-preflight.log",
+                  "api-test-server/server-tests.log",
+                  "api-test-server/server.log",
+                  "api-automation-framework/smoke-tests.log",
+                  "api-automation-framework/full-tests.log",
+                  "api-automation-framework/logs/*.log",
+                  "api-automation-framework/allure-results/smoke/**/*",
+                  "api-automation-framework/allure-results/full/**/*",
+              )
+              written = 0
+              skipped = []
+              for pattern in patterns:
+                  for path in sorted(workspace.glob(pattern)):
+                      relative = path.relative_to(workspace)
+                      ancestors = [path, *path.parents]
+                      if any(part.is_symlink() for part in ancestors):
+                          skipped.append(redact(relative.as_posix()) + " (symlink)")
+                          continue
+                      if not path.is_file():
+                          continue
+                      if (not path.resolve().is_relative_to(workspace)
+                              or any(part.startswith(".") for part in relative.parts)
+                              or path.suffix.lower() not in (".json", ".txt", ".log")
+                              or redact(relative.as_posix()) != relative.as_posix()):
+                          skipped.append(redact(relative.as_posix()) + " (unsupported path/type)")
+                          continue
+                      try:
+                          with path.open("rb") as stream:
+                              text = read_text(stream)
+                      except (UnicodeError, ValueError):
+                          skipped.append(redact(relative.as_posix()) + " (unsupported text)")
+                          continue
+                      if path.suffix.lower() == ".json":
+                          # Parse first so escaped quotes/Unicode in traces cannot bypass matching.
+                          clean = json.dumps(redact_json(json.loads(text)), ensure_ascii=False, indent=2)
+                      else:
+                          clean = redact(text)
+                      destination = safe / relative
+                      destination.parent.mkdir(parents=True, exist_ok=True)
+                      destination.write_text(clean, encoding="utf-8")
+                      written += 1
+              summary = {"sanitized_files": written, "skipped_files": skipped}
+              (safe / "sanitization-summary.json").write_text(
+                  json.dumps(summary, ensure_ascii=True, indent=2), encoding="utf-8"
+              )
+              print(f"Safe artifacts built: {written} text files; {len(skipped)} skipped")
+
+          def main():
+              if len(sys.argv) != 2 or sys.argv[1] not in ("stream", "artifact"):
+                  raise ValueError("Unsupported redaction mode")
+              if sys.argv[1] == "stream":
+                  # Buffer until EOF before emitting: handles multiline secrets without partial leaks.
+                  clean = redact(read_text(sys.stdin.buffer))
+                  sys.stdout.buffer.write(clean.encode("utf-8"))
+                  sys.stdout.buffer.flush()
+              else:
+                  artifacts()
+
+          if __name__ == "__main__":
+              try:
+                  main()
+              except Exception:
+                  # Security boundary: no exception text/traceback, and never pretend success.
+                  print("::error::CI redaction failed; unsafe output/artifact withheld", file=sys.stderr)
+                  sys.exit(1)
+          '''
+          compile(source, "ci_redact.py", "exec")
+          (Path(os.environ["RUNNER_TEMP"]) / "ci_redact.py").write_text(source, encoding="utf-8")
+
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip 2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream
           python -m pip install \
             -r api-test-server/requirements.txt \
-            -r api-automation-framework/requirements.txt
-          python -m pip check
+            -r api-automation-framework/requirements.txt \
+            2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream
+          python -m pip check 2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream
+
+      - name: Verify MySQL application connection
+        timeout-minutes: 1
+        run: |
+          python - <<'PY' 2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream | tee api-test-server/database-preflight.log
+          import os
+
+          import pymysql
+
+          if os.environ["DB_NAME"] != "api_test":
+              raise SystemExit("::error::CI must use the isolated api_test database")
+
+          try:
+              with pymysql.connect(
+                  host=os.environ["DB_HOST"],
+                  port=int(os.environ["DB_PORT"]),
+                  user=os.environ["DB_USER"],
+                  password=os.environ["DB_PASSWORD"],
+                  database=os.environ["DB_NAME"],
+                  connect_timeout=int(os.environ["DB_CONNECT_TIMEOUT"]),
+                  read_timeout=5,
+                  write_timeout=5,
+              ) as connection:
+                  with connection.cursor() as cursor:
+                      cursor.execute("SELECT 1")
+                      if cursor.fetchone() != (1,):
+                          raise SystemExit("::error::MySQL preflight returned an unexpected result")
+          except pymysql.MySQLError as error:
+              code = error.args[0] if error.args and isinstance(error.args[0], int) else "unknown"
+              raise SystemExit(
+                  f"::error::MySQL preflight failed (code {code}); check CI database configuration"
+              ) from None
+
+          print("MySQL application connection to api_test verified")
+          PY
 
       - name: Run test server tests
         working-directory: api-test-server
-        run: python -m pytest -v -W error
+        run: >-
+          python -m pytest -v -W error
+          2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream | tee server-tests.log
 
       - name: Start FastAPI test server
         working-directory: api-test-server
@@ -88,21 +283,39 @@ jobs:
           echo $! > server.pid
 
       - name: Wait for FastAPI and MySQL
+        timeout-minutes: 3
         run: |
+          server_pid=$(cat api-test-server/server.pid)
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8000/health/db > /dev/null; then
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "::error::FastAPI exited before becoming ready"
+              python "$RUNNER_TEMP/ci_redact.py" stream < api-test-server/server.log
+              exit 1
+            fi
+            if curl --fail --silent --show-error --connect-timeout 2 --max-time 3 \
+              "$API_BASE_URL/health/db" > /dev/null; then
+              echo "FastAPI and MySQL are ready"
               exit 0
             fi
             sleep 2
           done
-          cat api-test-server/server.log
+          echo "::error::FastAPI database readiness check timed out"
+          python "$RUNNER_TEMP/ci_redact.py" stream < api-test-server/server.log
           exit 1
 
       - name: Run smoke tests
         working-directory: api-automation-framework
         run: >-
           python -m pytest -v -W error --env=test -m smoke
-          --alluredir=allure-results --clean-alluredir
+          --alluredir=allure-results/smoke --clean-alluredir
+          2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream | tee smoke-tests.log
+
+      - name: Run full tests
+        working-directory: api-automation-framework
+        run: >-
+          python -m pytest -v -W error --env=test
+          --alluredir=allure-results/full --clean-alluredir
+          2>&1 | python "$RUNNER_TEMP/ci_redact.py" stream | tee full-tests.log
 
       - name: Stop FastAPI test server
         if: always()
@@ -112,18 +325,25 @@ jobs:
             server_pid=$(cat server.pid)
             if kill -0 "$server_pid" 2>/dev/null; then
               kill "$server_pid"
-              wait "$server_pid" || true
             fi
           fi
 
-      - name: Upload test artifacts
+      - name: Sanitize test artifacts
+        id: sanitize
         if: always()
+        timeout-minutes: 2
+        run: |
+          if [[ ! -f "$RUNNER_TEMP/ci_redact.py" ]]; then
+            echo "::error::CI redactor is unavailable; artifact upload blocked"
+            exit 1
+          fi
+          python "$RUNNER_TEMP/ci_redact.py" artifact
+
+      - name: Upload test artifacts
+        if: always() && steps.sanitize.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: api-test-results-${{ github.run_id }}
-          path: |
-            api-automation-framework/allure-results
-            api-automation-framework/logs/api_test.log
-            api-test-server/server.log
-          if-no-files-found: warn
+          name: api-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-artifacts-safe
+          if-no-files-found: error
           retention-days: 14
