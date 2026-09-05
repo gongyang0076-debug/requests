@@ -34,7 +34,7 @@ POST /api/orders/{id}/cancel
 ## 环境要求
 
 - Python 3.11 或更高版本
-- 推荐使用 Python 3.11，与后续 GitHub Actions 环境保持一致
+- 推荐使用 Python 3.11，与当前 GitHub Actions 验收环境保持一致
 
 ## 安装
 

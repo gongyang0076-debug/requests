@@ -55,7 +55,14 @@ Test Case → Fixture → AuthApi / UserApi / ProductApi / OrderApi → HttpClie
 ```
 
 敏感字段会在日志和 Allure 附件中递归脱敏。当前覆盖
-`Authorization`、`Token`、`Password` 和 `Cookie`（不区分大小写，并支持嵌套数据）。
+`Authorization`、Bearer Token、JWT、`password` / `passwd`、`access_token` /
+`refresh_token`、`api_key` / `secret` 和 `Cookie`。FastAPI / Pydantic 返回
+422 validation error 时，脱敏器根据 `loc` 所指向的敏感字段遮蔽同一错误对象中的
+`input`，同时保留普通字段的诊断值。
+
+当前验收结果为框架单元测试 54 passed、Regression 43 passed、Smoke 5 passed、
+Full 97 passed，4-worker Full 97 passed。97 是参数化展开后的 test item 数量，
+不是接口数量或代码覆盖率；Smoke 已包含在 Full 中。
 
 认证、商品、订单及安全输入数据分别位于 `data/auth.yaml`、`data/product.yaml`、`data/order.yaml`、`data/security.yaml`。订单测试从商品创建响应动态获取 Product ID，再从订单创建响应动态获取 Order ID，不依赖固定数据库记录。
 
@@ -187,21 +194,24 @@ GitHub Actions 工作流位于项目根目录的 `.github/workflows/api-test.yml
 - 向 `main` 提交 Pull Request
 - 在 Actions 页面手动触发
 
-流水线使用 Ubuntu Runner、Python 3.11 和 MySQL 8.4 Service Container，执行顺序为：
+流水线使用 Ubuntu Runner、Python 3.11 和 MySQL 8.4.5 Service Container，执行顺序为：
 
 ```text
-Checkout
-→ 安装两个项目的依赖
-→ 执行 FastAPI 服务自身测试
-→ 启动 FastAPI
-→ 等待 /health/db
-→ 执行 pytest -m smoke
-→ 上传 Allure Results、HTTP 日志和服务日志
+MySQL 初始化 → Checkout → Python 3.11 → 安装依赖
+→ DB precheck → Server Tests → 启动 FastAPI → Health Check
+→ Smoke → Full → Stop Server → Sanitize → Security Gate
+→ Upload Sanitized Artifact
 ```
 
-MySQL 和 JWT 凭据由当前 GitHub `run_id`、`run_attempt` 动态组合，仅在隔离的 CI
-运行期间使用，不依赖本地 `.env`，也不包含生产密码。连接真实外部环境时，应改用
-GitHub Repository/Environment Secrets，不要把真实密码写入 Workflow。
+MySQL 和 JWT 配置通过 GitHub Repository Secrets 注入，仅供隔离的 CI 运行使用，
+不依赖本地 `.env`，也不上传该文件。pytest 输出经过 stream redactor 后才进入控制台；
+Bash `pipefail` 保留 pytest、sanitizer 和 `tee` 的退出码。
 
-Allure Results 和日志无论测试成功或失败都会上传，保留 14 天。Smoke Test 失败时
-Job 会保持失败状态，后续的服务清理和产物上传不会掩盖原始测试结果。
+CI 对日志、Allure JSON、文本附件和失败 trace 做二次脱敏，只上传安全暂存目录。
+sanitizer 失败时 Artifact 上传门禁关闭，不会回退上传原始文件。Smoke 和 Full 的
+Allure Results 分目录保存，安全 Artifact 保留 14 天。
+
+已复核的 GitHub Actions Run `33896367458` 状态为 PASS：Server 32 passed、
+Smoke 5 passed、Full 97 passed。安全 Artifact 共 603 个文件，
+`sanitized_files=602`、`skipped_files=[]`，422 password validation input 已确认为
+`[REDACTED]`。这是当前交付基线的验收结果，不是生产级安全认证。

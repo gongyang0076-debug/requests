@@ -11,6 +11,12 @@
 
 项目早期使用公开 API 验证请求封装和测试分层。公开 Mock API 无法稳定覆盖数据持久化、JWT、数据库状态、订单流转、数据清理和并发库存，因此后续加入 FastAPI + MySQL 服务，形成从 HTTP 请求到数据库验证的完整测试环境。
 
+## 项目亮点与技术栈
+
+项目采用 Test → Fixture → API Object → HttpClient → `requests.Session` 分层，使用 YAML、`pytest.mark.parametrize` 和 Faker 管理动态测试数据，通过独立 MySQL 查询验证关键业务状态。当前已经接入 E2E、pytest-xdist、Logging、Allure、GitHub Actions 和脱敏后的 CI Artifact。
+
+技术栈包括 Python 3.11、Pytest、Requests、FastAPI、Pydantic、SQLAlchemy、MySQL 8.4、JWT、YAML、Faker、Allure、pytest-xdist 和 GitHub Actions。
+
 ## 当前已验证结果
 
 以下结果来自 Python 3.11 与 MySQL 8.4.5 隔离环境中的最新验收：
@@ -18,14 +24,17 @@
 | 检查项 | 结果 |
 | --- | --- |
 | FastAPI Server Tests | 32 passed |
-| Smoke Tests | 5 passed，60 deselected |
-| Regression Tests | 41 passed，24 deselected |
-| Automation Full Test Suite | 65 passed |
-| 4-worker pytest-xdist Full Suite | 65 passed |
+| Framework Unit Tests | 54 passed |
+| Smoke Tests | 5 passed，92 deselected |
+| Regression Tests | 43 passed，54 deselected |
+| Automation Full Test Suite | 97 passed |
+| 4-worker pytest-xdist Full Suite | 97 passed |
 | API + DB Assertion | PASS |
 | Concurrent Stock Protection | PASS，两个请求分别返回 201 和 409，剩余库存为 0 |
 | Allure Results | Supported，已验证结果文件和 Request/Response 附件可生成 |
-| GitHub Actions | Workflow included，远端运行状态另行验收 |
+| GitHub Actions | PASS，Run ID `33896367458` |
+
+`97 passed` 表示 Pytest 参数化展开后的 test item 数量，不是接口数量，也不代表 100% 代码覆盖率。Smoke 属于 Full 测试集的一部分，不重复累计。
 
 ## System Architecture
 
@@ -251,13 +260,17 @@ HttpClient 为每次调用记录 Method、URL、Headers、Cookies、Params、Req
 日志和附件会递归脱敏以下字段及其常见变体：
 
 - `Authorization`
-- JWT 和其他 Token
-- `Password`
+- Bearer Token 与典型三段式 JWT
+- `password`、`passwd`
+- `token`、`access_token`、`refresh_token`
+- `api_key`、`secret`
 - `Cookie` 与 `Set-Cookie`
+
+FastAPI / Pydantic 返回 422 validation error 时，脱敏器会根据 `loc` 指向的敏感字段遮蔽同一错误对象中的 `input`，非敏感字段仍保留诊断值。HttpClient 处理的是日志和 Allure 使用的诊断副本，不修改实际 HTTP 请求、响应或测试断言。
 
 日志同时输出到控制台和文件。串行测试写入 `logs/api_test.log`，pytest-xdist worker 分别写入 `api_test_gw0.log`、`api_test_gw1.log` 等文件，避免多个进程竞争同一个日志句柄。
 
-Allure Results 包含 Epic、Feature、Story、Step、HTTP Request、HTTP Response 和传输失败诊断。Pytest 断言失败由 `allure-pytest` 写入测试结果。生成原始结果不依赖 Allure CLI，HTML 报告是可选步骤。
+Allure Results 包含 Epic、Feature、Story、Step、HTTP Request、HTTP Response 和传输失败诊断。Pytest 断言失败由 `allure-pytest` 写入测试结果。CI 会再次处理 Allure JSON、文本附件以及 `statusDetails.message` / `statusDetails.trace`，只上传脱敏后的暂存副本。生成原始结果不依赖 Allure CLI，HTML 报告是可选步骤。
 
 ## Test Classification
 
@@ -311,11 +324,9 @@ FastAPI 服务另外读取 `JWT_SECRET_KEY`、`JWT_ALGORITHM` 和 `ACCESS_TOKEN_
 
 ### Clone
 
-仓库地址发布后，将占位符替换为实际 URL：
-
 ```bash
-git clone <repository-url>
-cd pytest-api-automation-project
+git clone https://github.com/gongyang0076-debug/requests.git
+cd requests
 ```
 
 ### Prepare MySQL
@@ -425,33 +436,20 @@ allure open reports/allure-report
 
 ## GitHub Actions
 
-仓库包含 `.github/workflows/api-test.yml`，触发条件为 `main` 分支 Push、Pull Request 和手动运行。工作流设计如下：
+仓库包含 `.github/workflows/api-test.yml`，触发条件为 `main` 分支 Push、Pull Request 和手动运行。当前工作流已经在 GitHub-hosted Ubuntu Runner 上完成远端验收：
 
 ```text
-Push / Pull Request / Manual Dispatch
-    ↓
-Python 3.11
-    ↓
-MySQL 8.4 Service Container
-    ↓
-Install Dependencies
-    ↓
-FastAPI Server Tests
-    ↓
-Start FastAPI
-    ↓
-Readiness Check: /health/db
-    ↓
-Smoke Tests
-    ↓
-Upload Allure Results / Logs / Server Log
+MySQL 8.4.5 初始化 → Checkout → Python 3.11 → 安装依赖
+→ DB precheck → Server Tests → 启动 FastAPI → Health Check
+→ Smoke → Full → Stop Server → Sanitize → Security Gate
+→ Upload Sanitized Artifact
 ```
 
-CI 中的数据库和 JWT 值只用于当前运行。接入外部环境时应使用 GitHub Repository 或 Environment Secrets。
+CI 通过 Repository Secrets 注入隔离测试环境的数据库和 JWT 配置，不读取或上传本地 `.env`。测试输出先经过 stream redactor 再进入控制台和日志，Bash `pipefail` 保留 pytest、sanitizer 和 `tee` 的非零退出码。Artifact 构建使用明确的文本文件白名单；sanitizer 失败会关闭上传门禁，不会回退上传原始日志或 Allure Results。Smoke 与 Full 使用独立的 Allure Results 目录。
 
-CI workflow is included in the repository; remote GitHub Actions verification is completed separately during release validation.
+最近一次已复核的交付基线为 GitHub Actions Run `33896367458`：Server 32 passed、Smoke 5 passed、Full 97 passed。下载的安全 Artifact 包含 603 个文件，其中 `sanitized_files=602`、`skipped_files=[]`；短密码和长密码的真实 422 响应均显示 `input: "[REDACTED]"`，未发现已知敏感值残留。
 
-当前 README 不把工作流标记为远端 PASS，因为仓库还没有完成可核验的 GitHub Actions 运行。
+这是当前交付基线的工程验收结果，不代表生产级安全认证。
 
 ## Design Decisions
 
@@ -494,7 +492,7 @@ API 响应正确不代表数据库一定完成了持久化。订单支付同时�
 - 数据库 Schema 通过 SQLAlchemy `create_all` 创建，尚未接入 Alembic Migration。
 - CI 使用隔离的测试环境 MySQL，没有连接生产数据库。
 - 并发验收关注库存一致性，尚未进行大型压力或性能测试。
-- GitHub Actions Workflow 已提交，远端执行结果需要在发布验收中单独确认。
+- 当前没有分布式事务、完整 Token Refresh 或生产级监控体系。
 
 ## Future Improvements
 
