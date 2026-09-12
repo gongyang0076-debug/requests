@@ -1,3 +1,5 @@
+"""订单 HTTP 路由，负责注入当前用户并映射业务异常。"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -22,6 +24,8 @@ router = APIRouter(prefix="/api/orders", tags=["orders"])
 
 
 def _http_error(exc: ValueError) -> HTTPException:
+    """把不存在映射为 404，把库存/状态冲突映射为 409。"""
+
     if isinstance(exc, (OrderNotFoundError, ProductNotFoundError)):
         error_status = status.HTTP_404_NOT_FOUND
     else:
@@ -35,6 +39,8 @@ def create(
     session: Annotated[Session, Depends(get_database_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> OrderResponse:
+    """以当前 JWT 用户创建订单，不接受客户端指定 user_id。"""
+
     try:
         order = create_order(
             session,
@@ -57,6 +63,8 @@ def get_by_id(
     session: Annotated[Session, Depends(get_database_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> OrderResponse:
+    """读取当前用户自己的订单。"""
+
     try:
         order = get_order(session, order_id, current_user.id)
     except OrderNotFoundError as exc:
@@ -70,6 +78,8 @@ def pay(
     session: Annotated[Session, Depends(get_database_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> OrderResponse:
+    """支付当前用户自己的订单。"""
+
     try:
         order = pay_order(session, order_id, current_user.id)
     except (OrderNotFoundError, InvalidOrderStateError) as exc:
@@ -83,6 +93,8 @@ def cancel(
     session: Annotated[Session, Depends(get_database_session)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> OrderResponse:
+    """取消当前用户自己的订单，并恢复库存。"""
+
     try:
         order = cancel_order(session, order_id, current_user.id)
     except (OrderNotFoundError, InvalidOrderStateError) as exc:

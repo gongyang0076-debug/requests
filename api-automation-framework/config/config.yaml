@@ -1,7 +1,14 @@
+# API 测试环境配置
+# 顶层 key 是环境名，对应 config.py 中 load_config(environment) 传入的值。
+# 可以通过命令行 --env、环境变量 TEST_ENV 选择；不指定时默认使用 test。
+# API_BASE_URL / API_TIMEOUT 环境变量可以覆盖下面同名字段的值。
+
+# 本地 / CI 使用的测试环境，对接运行在 127.0.0.1:8000 的 FastAPI 服务
 test:
   base_url: http://127.0.0.1:8000
   timeout: 10
 
+# 预发环境示例，对接另一个端口上的服务，超时放宽到 15 秒
 pre:
   base_url: http://127.0.0.1:8001
   timeout: 15

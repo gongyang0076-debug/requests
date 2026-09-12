@@ -1,3 +1,5 @@
+"""orders 表的 SQLAlchemy 映射。"""
+
 from datetime import datetime
 from decimal import Decimal
 
@@ -8,7 +10,10 @@ from app.database.base import Base
 
 
 class Order(Base):
+    """订单记录，关联用户和商品，并保存订单创建时计算出的总金额。"""
+
     __tablename__ = "orders"
+    # 数据库层重复保护数量、金额和状态枚举，避免服务层遗漏造成脏数据。
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_orders_quantity_positive"),
         CheckConstraint("total_amount > 0", name="ck_orders_total_amount_positive"),

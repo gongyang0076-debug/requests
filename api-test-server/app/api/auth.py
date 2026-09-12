@@ -1,3 +1,5 @@
+"""认证 HTTP 路由：把 Schema、Service 和 HTTP 语义连接起来。"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,6 +29,8 @@ def register(
     payload: RegisterRequest,
     session: Annotated[Session, Depends(get_database_session)],
 ) -> UserResponse:
+    """注册用户；唯一键冲突返回 409，而不是底层数据库错误。"""
+
     try:
         user = register_user(
             session,
@@ -49,6 +53,8 @@ def login(
     session: Annotated[Session, Depends(get_database_session)],
     auth_settings: Annotated[AuthSettings, Depends(get_auth_settings)],
 ) -> TokenResponse:
+    """验证凭据并签发 Bearer JWT。"""
+
     try:
         user = authenticate_user(
             session,
@@ -62,6 +68,7 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+    # TokenResponse 不包含密码、哈希或其他用户敏感字段。
     return TokenResponse(
         access_token=create_access_token(user.id, auth_settings),
     )
